@@ -1,0 +1,21 @@
+needed to install opencv-python
+also update pip and numpy and imuitls
+and scipy
+
+added matplot lib to see ouputs
+
+
+need to add way to upload image
+way to define the key
+way to set student name
+way to preprogram list of students names. from set
+
+
+I have cut out the skew to birds eye view
+
+THis version currently assumes
+# in order to label the contour as a question, region
+	# should be sufficiently wide, sufficiently tall, and
+	# have an aspect ratio approximately equal to 1
+		#note this is not true for my one
+
