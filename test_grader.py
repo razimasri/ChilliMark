@@ -59,9 +59,11 @@ image = cv2.imread(filename)
 #This will have to become a function, question area.
 
 
+#s_name = crop_area(image)
 q_area = crop_area(image)
 q_row = crop_area(q_area)
 q_box = crop_area(q_row)
+#choices = int(input())
 
 
 q_h_w = q_box.shape[:2]
@@ -94,7 +96,7 @@ for c in cnts:
 	if ar >= q_ratio*0.8 and ar <= q_ratio*1.2:
 		questionCnts.append(c)
 
-print(questionCnts)
+
 
 
 unculled = cv2.drawContours(q_area.copy(), cnts, -1, (0,255,0), 3)
