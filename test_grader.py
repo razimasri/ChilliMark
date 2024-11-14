@@ -10,13 +10,10 @@ from matplotlib import pyplot as plt
 #from statistics import mode
 #from collections import Counter
 
-def crop_area(image):
-    #find height of image and scale to be 800 pixels
-    #show shrunken image, select box,
-    #return coordinates. 
-    # this will also be used in the future to highlight and store the student name
+def crop_area(image, instructions,blur):
+
     height, width = image.shape[:2]
-    
+    temp = image.copy()
     if height>width:
         scale = height/800
         width = int(width/scale)
@@ -26,8 +23,11 @@ def crop_area(image):
         height = int(height/scale)
         width = 1200
     
-    small =cv2.resize(image , (width,height),cv2.INTER_NEAREST) 
+    if blur:
+    	temp = cv2.GaussianBlur(temp,(5,5),0)
     
+    small =cv2.resize(temp, (width,height),cv2.INTER_NEAREST) 
+    cv2.putText(small,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(72, 66, 245),1,lineType=cv2.LINE_AA) 
     x,y,w,h =cv2.selectROI("Select Area", small, fromCenter=False,showCrosshair=True)
     x= int(x*scale) 
     y= int(y*scale) 
@@ -38,34 +38,43 @@ def crop_area(image):
     
     return cropped
 
+def get_contour(image,contour_retrieval_mode):
+	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+	thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+	cnts,heir = cv2.findContours(thresh, contour_retrieval_mode, cv2.CHAIN_APPROX_SIMPLE)
+	
+	return cnts, heir 
+
 def manual_bubble():
 	
-	q_row = crop_area(q_area)
-	q_box = crop_area(q_row)
-	bub_hw = q_box.shape[:2]
-	#q_ratio = bub_hw[1]/bub_hw[0]
+
+	q_box = crop_area(q_area[0:300,0:300],"Select one Bubble",False)
+
+	cnts,hier = get_contour(q_box,cv2.RETR_EXTERNAL)
+	
+	areas = []
+	for c in cnts:
+		areas = cv2.contourArea(c)
+	max_index = np.argmax(areas)
+	(_, _, w, h) = cv2.boundingRect(cnts[max_index])
+	bub_hw = [h,w]
+
 	return bub_hw #q_ratio, 
 
 def find_bubbles(q_area):
-    
-	gray = cv2.cvtColor(q_area, cv2.COLOR_BGR2GRAY)		#i don't think this section is needed if i scan them in vs camera
-	thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]	
-	# find contours in the thresholded image, then initialize
-	# the list of contours that correspond to questions
-	cnts,hier = cv2.findContours(thresh.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-	#cnts = imutils.grab_contours(cnts)
-	#print(cnts[0][-1])
-	#Need to add first try an auto detect based on most frequent. if fail then go through the select on smaller areas
+    	
+
+	cnts,hier = get_contour(q_area,cv2.RETR_CCOMP)
+
+
 	for i,c in enumerate(cnts):
-		#compute the bounding box of the contour, then use the bounding box to derive the aspect ratio
-		
-		#ar = w / float(h)
+
 		peri=cv2.arcLength(c,True)
 		c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
 		#print(c)
-		(x, y, w, h) = cv2.boundingRect(c)
+		(_, _, w, h) = cv2.boundingRect(c)
 		
-		if bub_hw[1]*0.7<= w <= bub_hw[1]*1.3 and bub_hw[0]*0.7 <= h <= bub_hw[0]*1.3 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
+		if bub_hw[1]*0.9<= w <= bub_hw[1]*1.1 and bub_hw[0]*0.9 <= h <= bub_hw[0]*1.1 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
 			bubbles.append(c)
 			
 	bubbles_image = cv2.drawContours(q_area.copy(), bubbles, -1, (0,255,0), 3)
@@ -88,25 +97,25 @@ choices = 4
 filename = askopenfilename()  #need to add pdf and multiple images option
 
 image = cv2.imread(filename)
-q_area = crop_area(image)
+q_area = crop_area(image.copy(),"Select question area",True)
 #s_name = crop_area(image)
-bub_hw = manual_bubble() #no need to improve upon manual bubbles yet until i program the auto way
+bub_hw = manual_bubble() 
 
 #find_bubbles(image)
 bubbles=[]
 find_bubbles(q_area)
 
-#print(questionCnts[0])
+# #print(questionCnts[0])
 
-#sortbubble, then see number of columns
-columns =[]
+# #sortbubble, then see number of columns
+# columns =[]
 
-bubbles = imutils.contours.sort_contours(bubbles, method="left-to-right")
-bubbles = imutils.grab_contours(bubbles)
+# bubbles = imutils.contours.sort_contours(bubbles, method="left-to-right")
+# bubbles = imutils.grab_contours(bubbles)
 
-prev=0
-for i, bubble in enumerate(bubbles):
-    x,y,w,h= cv2.boundingRect(bubble)
-    print(x)
+# prev=0
+# for i, bubble in enumerate(bubbles):
+#     x,y,w,h= cv2.boundingRect(bubble)
+    
     
 
