@@ -43,7 +43,7 @@ def manual_bubble():
 
 	q_h_w = q_box.shape[:2]
 	q_ratio = q_h_w[1]/q_h_w[0]
-	return q_ratio
+	return q_ratio, q_h_w
 
 def find_bubbles(q_area):
     
@@ -69,7 +69,7 @@ def find_bubbles(q_area):
 			#note this is not true for my one
 
 	
-		if ar >= q_ratio*0.8 and ar <= q_ratio*1.2: #w >= q_h_w[1]*0.9 and h >= q_h_w[0]*0.9 and 
+		if ar >= q_ratio*0.8 and ar <= q_ratio*1.2 and w >= q_h_w[1]*0.9 and h >= q_h_w[0]*0.9: #need to add upper limit too
 			questionCnts.append(c)
 
 	bubbles = cv2.drawContours(q_area.copy(), questionCnts, -1, (0,255,0), 5)
@@ -96,7 +96,7 @@ filename = askopenfilename()  #need to add pdf and multiple images option
 image = cv2.imread(filename)
 q_area = crop_area(image)
 #s_name = crop_area(image)
-q_ratio = manual_bubble() #no need to improve upon manual bubbles yet until i program the auto way
+q_ratio, q_h_w = manual_bubble() #no need to improve upon manual bubbles yet until i program the auto way
 
 #find_bubbles(image)
 find_bubbles(q_area)
