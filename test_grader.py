@@ -20,9 +20,9 @@ def crop_area(image, instructions="Select Area",blur=False):
     	temp = cv2.GaussianBlur(temp,(5,5),0)
     
     if height>width:
-        scale = height/800
+        scale = height/705
         width = int(width/scale)
-        height = 800
+        height = 705
     else:
         scale = width/1200
         height = int(height/scale)
@@ -39,6 +39,7 @@ def crop_area(image, instructions="Select Area",blur=False):
     w= int((w+10)*scale) 
     h= int((h+10)*scale)
     
+    cv2.destroyAllWindows()
     return image[y:y+h,x:x+w]
 
 def get_thresh_image(image):
@@ -59,7 +60,7 @@ def check_fill(contour,thresh,index):
     fill = cv2.countNonZero(mask)
     return fill
 
-def manual_bubble(q_area):
+def manual_bubble():
 	
 	q_box = crop_area(q_area[0:300,0:400],"Select one EMPTY Bubble")
 
@@ -83,7 +84,7 @@ def	contour_center(cnt):
 	cy = int(M['m01']/M['m00'])
 	return [cx,cy]
 
-def find_bubbles(q_area):
+def find_bubbles(bub_hw,bub):
 	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
 	bubbles = []
@@ -143,7 +144,7 @@ def sort_into_columns(bubbles):
 		
 
 
-	show_image(q_area,temp_image)
+	#show_image(q_area,temp_image)
 	return columns, choices
 
 def find_questions(columns,choices):
@@ -167,17 +168,16 @@ def find_questions(columns,choices):
 	for q, question in enumerate(questions):
 		cv2.drawContours(temp_image, question, -1, colours[q%6], 3)
 	
-	show_image(q_area,temp_image)
+	#show_image(q_area,temp_image)
 	return questions
 
-def find_answers(q_area,questions,bub_fill):
+def find_answers(questions,bub_fill):
 	answers = []
 	temp_image = q_area.copy()
 	q_thresh = get_thresh_image(q_area)
 	for q,question in enumerate(questions):
 		answer = []
 		for b,bubble in enumerate(question):
-			#break out this mask into a function so I can 
 			fill = check_fill(question,q_thresh,b)
 			if fill < bub_fill*1.3:
 				fill = 0
@@ -193,15 +193,18 @@ def find_answers(q_area,questions,bub_fill):
 			answers.append("Unclear")
 		else:answers.append(answer.index(max(answer)))
 		
-		if ANSWER_KEY.get(q) != None:
-			temp_image = add_markup(colours[1],question[ANSWER_KEY.get(q)],key.get(ANSWER_KEY.get(q)),temp_image)
-			temp_image = cv2.drawContours(temp_image, question, ANSWER_KEY.get(q), colours[1], 3)		
-	show_image(q_area,temp_image)
-		
+		if ans_key_nums.get(q) != None:
+			temp_image = add_markup(colours[1],question[ans_key_nums.get(q)],ans_key_letters.get(q),temp_image)
+			temp_image = cv2.drawContours(temp_image, question, ans_key_nums.get(q), colours[1], 3)		
+	#show_image(q_area,temp_image)
 	let_answers=answers[:]
 
 	for a, answer in enumerate(answers):
-		let_answers[a] = key.get(answer)
+		if type(answer) == int:
+			let_answers[a] = chr(answer+65)
+			let_answers[a]
+		else:
+			let_answers[a] = answer
 
 	return answers, let_answers, temp_image
 def set_markup_size(contour):
@@ -228,10 +231,10 @@ def add_markup(colour,contour,choice,image):
 	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,colour,3,lineType=cv2.LINE_AA) 
 	return image
 
-def get_score(let_ans,ANSWER_KEY):
+def get_score(num_ans):
 	score = 0
-	for a, answer in enumerate(let_ans):
-		if answer == ANSWER_KEY.get(a):
+	for a, answer in enumerate(num_ans):
+		if answer == ans_key_nums.get(a):
 			score+=1
 	return score
 
@@ -242,26 +245,28 @@ def show_image(original,modified):
 	pyplot.title('modified Image'), pyplot.xticks([]), pyplot.yticks([])
 	pyplot.show()
 
-key = {0:"A",1:"B",2:"C",3:"D",4:"E",5:"F", "Unclear":"Unclear"}
-ANSWER_KEY = {0: 0, 1: 1, 2: 1, 3: 2, 4:1} #do not turn into list. otherwise i>ans_key will return error
+def main(filename,ans_nums,ans_letters):	#saw some stuff on git on the proper way to do this.
 
-#choices = 4
-colours = [(200,0,0),(0,200,0),(0,0,200),(220,200,0),(200,0,200),(0,200,200)] #this can be related to binary 1-6 backwards
 
-# load the image, and define key areas
-filename = tkinter.filedialog.askopenfilename()  #need to add pdf and multiple images option
-image = cv2.imread(filename)
-q_area = crop_area(image.copy(),"Select question area",True)
-bub_hw, bub_fill, bub = manual_bubble(q_area) 
-text_shift, font_size = set_markup_size(bub)
-bubbles = find_bubbles(q_area)
-columns,choices = sort_into_columns(bubbles)	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
-questions = find_questions(columns,choices)
-num_ans, let_ans, marked_img = find_answers(q_area,questions,bub_fill)
+	global colours, text_shift, font_size, q_area,ans_key_nums,ans_key_letters
+	ans_key_nums = ans_nums
+	ans_key_letters = ans_letters
 
-score = get_score(num_ans,ANSWER_KEY)
+	#key = {"A":0,"B":1,"C":2,"D":3,"E":4,"F":5, "Unclear":"Unclear"}
+	colours = [(200,0,0),(0,170,0),(0,0,200),(220,200,0),(200,0,200),(0,200,200)] 
+	image = cv2.imread(filename)
+	q_area = crop_area(image.copy(),"Select question area",True)
+	bub_hw, bub_fill, bub = manual_bubble() 
+	text_shift, font_size = set_markup_size(bub)
+	bubbles = find_bubbles(bub_hw,bub)
+	columns,choices = sort_into_columns(bubbles)	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
+	questions = find_questions(columns,choices)
+	num_ans, let_ans, marked_img = find_answers(questions,bub_fill)
 
-print(score)
+	score = get_score(num_ans)
+	
+	return let_ans, score, marked_img
+
 
     
     

@@ -13,6 +13,8 @@ way to preprogram list of students names. From set
 Reintroduce skew and rotation fixing 
 
 
+output csv files 
+
 
 
 
