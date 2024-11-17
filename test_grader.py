@@ -1,10 +1,14 @@
 # import the necessary packages
+# as a beginner I am avoiding renaming and only importing specifics so that I can be clear where each thing comes from
 #from imutils.perspective import four_point_transform #will needto import again when I deal with scans
+import tkinter.filedialog
 import imutils.contours
 import imutils
+import PIL
 import numpy
 import cv2
-from tkinter.filedialog import askopenfilename
+import tkinter
+#from tkinter.filedialog import askopenfilename
 from matplotlib import pyplot
 
 def crop_area(image, instructions="Select Area",blur=False):
@@ -24,7 +28,7 @@ def crop_area(image, instructions="Select Area",blur=False):
         height = int(height/scale)
         width = 1200
     
-    temp =cv2.resize(temp, (width,height)) 
+    temp = cv2.resize(temp, (width,height)) 
     cv2.putText(temp,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(255, 255, 255),10,lineType=cv2.LINE_AA) 
     cv2.putText(temp,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(1, 1, 1),2,lineType=cv2.LINE_AA) 
     cv2.putText(temp,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(200, 10, 145),1,lineType=cv2.LINE_AA) 
@@ -200,22 +204,26 @@ def find_answers(q_area,questions,bub_fill):
 		let_answers[a] = key.get(answer)
 
 	return answers, let_answers, temp_image
+def set_markup_size(contour):
+	_,_,w,h = cv2.boundingRect(contour)
+	text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, 3, 3)[0]
+	text_shift = [0,0]
+	if text_size [1]>h:	
+		font_size=1.5
+		text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, font_size, 3)[0]
+		text_shift[1] = -h//2
+	else:
+		font_size=3
+		text_shift[1] = h//2+text_size[1]//2
+	
+	text_shift[0]=w//2-text_size[0]//2
+
+	return text_shift, font_size
 
 def add_markup(colour,contour,choice,image):
-	x,y,w,h = cv2.boundingRect(contour)
-	textsize = cv2.getTextSize(choice,cv2.FONT_HERSHEY_SIMPLEX, 3, 3)[0]
-
-
-	
-	if textsize [1]>h:
-		text_y = y - h//2	
-		font_size=1.5
-		textsize = cv2.getTextSize(choice,cv2.FONT_HERSHEY_SIMPLEX, font_size, 3)[0]
-	else:
-		text_y = y+h//2+textsize[1]//2
-		font_size=3
-	
-	text_x = x+w//2-textsize[0]//2
+	x,y,_,_ = cv2.boundingRect(contour)
+	text_y = y+text_shift[1]
+	text_x = x+text_shift[0]
 	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,(255,255,255),15,lineType=cv2.LINE_AA) 
 	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,colour,3,lineType=cv2.LINE_AA) 
 	return image
@@ -235,16 +243,17 @@ def show_image(original,modified):
 	pyplot.show()
 
 key = {0:"A",1:"B",2:"C",3:"D",4:"E",5:"F", "Unclear":"Unclear"}
-ANSWER_KEY = {0: 0, 1: 1, 2: 1, 3: 2, 4:1}
+ANSWER_KEY = {0: 0, 1: 1, 2: 1, 3: 2, 4:1} #do not turn into list. otherwise i>ans_key will return error
 
 #choices = 4
 colours = [(200,0,0),(0,200,0),(0,0,200),(220,200,0),(200,0,200),(0,200,200)] #this can be related to binary 1-6 backwards
 
 # load the image, and define key areas
-filename = askopenfilename()  #need to add pdf and multiple images option
+filename = tkinter.filedialog.askopenfilename()  #need to add pdf and multiple images option
 image = cv2.imread(filename)
 q_area = crop_area(image.copy(),"Select question area",True)
 bub_hw, bub_fill, bub = manual_bubble(q_area) 
+text_shift, font_size = set_markup_size(bub)
 bubbles = find_bubbles(q_area)
 columns,choices = sort_into_columns(bubbles)	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
 questions = find_questions(columns,choices)
@@ -252,7 +261,6 @@ num_ans, let_ans, marked_img = find_answers(q_area,questions,bub_fill)
 
 score = get_score(num_ans,ANSWER_KEY)
 
-print(let_ans)
 print(score)
 
     
