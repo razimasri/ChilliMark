@@ -179,10 +179,11 @@ def find_answers(questions,bub_fill):
 		answer = []
 		for b,bubble in enumerate(question):
 			fill = check_fill(question,q_thresh,b)
-			if fill < bub_fill*1.2:
+			if fill < bub_fill*1.3:
 				fill = 0
 			else:
 				#temp_image = add_markup(colours[0],bubble,key.get(b),temp_image)
+				
 				temp_image = cv2.drawContours(temp_image, question, b, colours[0], 3)	
 			answer.append(fill)
 		
@@ -191,7 +192,9 @@ def find_answers(questions,bub_fill):
 			answers.append("Blank")
 		elif answer.count(0) < 3:
 			answers.append("Unclear")
-		else:answers.append(answer.index(max(answer)))
+			#clarify() need to make this once i get better with UI
+		else:
+			answers.append(answer.index(max(answer)))
 		
 		if ans_key_nums.get(q) != None:
 			temp_image = add_markup(colours[1],question[ans_key_nums.get(q)],ans_key_letters.get(q),temp_image)
@@ -266,7 +269,7 @@ def main(filename,ans_nums,ans_letters):	#saw some stuff on git on the proper wa
 	score = get_score(num_ans)
 	
 	cv2.putText(marked_img,"Score = " + str(score) + "/"+ str(len(ans_key_letters)),(50,50),cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,0),4,cv2.LINE_AA)
-	print(score)
+	#print(score)
 	
 	return let_ans, score, marked_img
 
