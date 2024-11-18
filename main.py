@@ -7,7 +7,7 @@ import PIL.Image
 import PIL.ImageTk
 import cv2
 import test_grader
-import PyMuPDF
+import pymupdf
 
 
 def choose_file():
@@ -79,6 +79,7 @@ def update_image(image):
 
 
 root = tkinter.Tk()
+root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="chillimark.ico"))
 root.title("Chilli Marker")
 root.configure(bg="#002b36", borderwidth=2)
 panelA=None
