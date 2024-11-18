@@ -2,10 +2,13 @@ import tkinter
 import tkinter.filedialog
 import tkinter.font
 import tkinter.messagebox
+
 import PIL.Image
 import PIL.ImageTk
 import cv2
 import test_grader
+import PyMuPDF
+
 
 def choose_file():
     global panelA
@@ -14,6 +17,8 @@ def choose_file():
 
     if not filename:
         return
+    
+    
     
     image = cv2.imread(filename)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -37,7 +42,7 @@ def mark_exam():
     for i, ans in enumerate(ans_key_input): #should make the ans_key in number rather than letters to prevent repeated conversion
         ans_key_nums[i]=ord(ans)-65
         ans_key_letter[i]=ans
-    print(ans_key)
+    #print(ans_key)
     
     stu_names_input = stu_names_input.title()
     stu_names = stu_names_input.split("\n")
@@ -53,8 +58,9 @@ def mark_exam():
     elif not ans_key or not stu_names:
         tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?")
     
-    _,_,marked_image = test_grader.main(filename,ans_key_nums,ans_key_letter)
+    _,score,marked_image = test_grader.main(filename,ans_key_nums,ans_key_letter)
     update_image(marked_image)
+    print(score)
 
 def update_image(image):
     global panelA

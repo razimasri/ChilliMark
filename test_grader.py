@@ -4,11 +4,11 @@
 import tkinter.filedialog
 import imutils.contours
 import imutils
-import PIL
+
 import numpy
 import cv2
 import tkinter
-#from tkinter.filedialog import askopenfilename
+
 from matplotlib import pyplot
 
 def crop_area(image, instructions="Select Area",blur=False):
@@ -144,7 +144,7 @@ def sort_into_columns(bubbles):
 		
 
 
-	#show_image(q_area,temp_image)
+	show_image(q_area,temp_image)
 	return columns, choices
 
 def find_questions(columns,choices):
@@ -179,7 +179,7 @@ def find_answers(questions,bub_fill):
 		answer = []
 		for b,bubble in enumerate(question):
 			fill = check_fill(question,q_thresh,b)
-			if fill < bub_fill*1.3:
+			if fill < bub_fill*1.2:
 				fill = 0
 			else:
 				#temp_image = add_markup(colours[0],bubble,key.get(b),temp_image)
@@ -211,7 +211,7 @@ def set_markup_size(contour):
 	_,_,w,h = cv2.boundingRect(contour)
 	text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, 3, 3)[0]
 	text_shift = [0,0]
-	if text_size [1]>h:	
+	if text_size [1]>h*1.2:	
 		font_size=1.5
 		text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, font_size, 3)[0]
 		text_shift[1] = -h//2
@@ -264,6 +264,9 @@ def main(filename,ans_nums,ans_letters):	#saw some stuff on git on the proper wa
 	num_ans, let_ans, marked_img = find_answers(questions,bub_fill)
 
 	score = get_score(num_ans)
+	
+	cv2.putText(marked_img,"Score = " + str(score) + "/"+ str(len(ans_key_letters)),(50,50),cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,0),4,cv2.LINE_AA)
+	print(score)
 	
 	return let_ans, score, marked_img
 
