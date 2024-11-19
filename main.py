@@ -34,7 +34,7 @@ def choose_file():
     if not filename:
         return
     canvas_frame.children.clear()
-    canvas = tkinter.Canvas(canvas_frame, bg="#004052", height=725, width=523, bd=0, highlightthickness=0, relief='ridge')
+    canvas = tkinter.Canvas(canvas_frame, bg=palette.get("frame"), height=725, width=523, bd=0, highlightthickness=0, relief='ridge')
     canvas.grid(padx="10", pady="10", column=0,row=0, sticky="nsew")
 
     doc = pymupdf.open(filename)
@@ -90,7 +90,8 @@ def mark_exam():
     for scan in scans:
         _,score,marked_image = test_grader.main(scan,ans_key_nums,ans_key_letter)
 
-    
+
+version = ["1.0","Adjuma"]
 
 
 
@@ -100,7 +101,14 @@ def mark_exam():
 root = tkinter.Tk()
 #root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="chillimark.ico"))
 root.title("Chilli Marker")
-root.configure(bg="#002b36", borderwidth=2)
+palette = {
+    "darktext" : "#280e0d",
+    "frame" : "#571622",
+    "whitespace" : "#e3e5ef",
+    "lighttext" : "#e3e5ef",
+    "bg": "#8c1529",
+    "button": "#b1a1a4"}
+root.configure(bg=palette.get("bg"), borderwidth=2)
 filename=None
 ans_key=None
 stu_names=None
@@ -116,37 +124,37 @@ root.option_add("*Font", default_font)
 root.columnconfigure(0, weight=1)
 root.rowconfigure(1, weight=1)
                         
-canvas_frame = tkinter.Frame(root,bg="#004052", height=725, width=523, bd=0, highlightthickness=0, relief='ridge')
+canvas_frame = tkinter.Frame(root,bg=palette.get("frame"), height=725, width=523, bd=0, highlightthickness=0, relief='ridge')
 canvas_frame.grid(padx="10", pady="10", column=0,row=0)
 canvas_frame.columnconfigure(0, weight=1)
 canvas_frame.rowconfigure(1, weight=1)
 canvas_frame.grid_propagate(False)
 
 
-btn_frame = tkinter.Frame(root, bg="#002b36",height=725,width=523)
+btn_frame = tkinter.Frame(root, bg=palette.get("bg"),height=725,width=523)
 btn_frame.grid(padx=(0,10), pady="10",column=1,row=0, sticky="nsew")
 
 
 file_btn=tkinter.Button(btn_frame, text="Select Exam", height = 1, width = 20, borderwidth=3, command=choose_file)
-file_btn.pack(side="top")
-entry_frame = tkinter.Frame(btn_frame,bg="#002b36", height= 500)
+file_btn.pack(side="top",pady=(0,10))
+entry_frame = tkinter.Frame(btn_frame,bg=palette.get("frame"), height= 500)
 entry_frame.pack(fill="both", expand="yes")
 mark_btn=tkinter.Button(btn_frame, text="Mark Exams", height = 3, width = 20,borderwidth=3, command=mark_exam)
-mark_btn.pack(side="bottom")
+mark_btn.pack(side="bottom",pady=(10,0))
 
-entry_frame_ans= tkinter.Frame(entry_frame,bg="#004052")
+entry_frame_ans= tkinter.Frame(entry_frame,bg=palette.get("frame"))
 entry_frame_ans.pack(side="left", padx=(0,10), pady="10",fill="both", expand="yes")
-entry_frame_stu= tkinter.Frame(entry_frame,bg="#004052")
+entry_frame_stu= tkinter.Frame(entry_frame,bg=palette.get("frame"))
 entry_frame_stu.pack(side="right", padx=(0,0), pady="10",fill="both", expand="yes")
 
-tkinter.Label(entry_frame_ans,text="Answer Key",height = 1,anchor="w",bg="#004052",fg="#fff").pack(sid="top",padx="10", pady="10")
-tkinter.Label(entry_frame_ans,text="On separate lines or with commas\nExample: With commas\n    A, A, B, C, ... \n Or: On separate lines\n    A\n    A\n    B\n    ...",anchor="w",bg="#004052", font=small_font,fg="#fff",justify="left").pack(side="bottom", padx="10", pady="10")
-ans_key_box=tkinter.Text(entry_frame_ans,width=30,height=2, font=small_font)
+tkinter.Label(entry_frame_ans,text="Answer Key",height = 1,anchor="w",bg=palette.get("frame"),fg=palette.get("lighttext")).pack(sid="top",padx="10", pady="10")
+tkinter.Label(entry_frame_ans,bg=palette.get("frame"),text="On separate lines or with commas\nExample: With commas\n    A, A, B, C, ... \n Or: On separate lines\n    A\n    A\n    B\n    ...",anchor="w", font=small_font,fg=palette.get("lighttext"),justify="left").pack(side="bottom", padx="10", pady="10")
+ans_key_box=tkinter.Text(entry_frame_ans,width=30,height=2, font=small_font, bg=palette.get("whitespace"))
 ans_key_box.pack(padx = "10",fill="both",expand="yes")
 
-tkinter.Label(entry_frame_stu, text="Student Names", height = 1, anchor="w",bg="#004052",fg="#fff").pack(side = "top", padx="10", pady="10")
-tkinter.Label(entry_frame_stu,wraplength=190, text="Organize the names in the same order as the scans\nExample: \n    Tanner Moore \n    Emily Hunt\n    Foster Holmes\n    Bailey Alexander\n    ...",anchor="w",bg="#004052", font=small_font,fg="#fff",justify="left").pack(side="bottom", padx="10", pady="10")
-stu_names_box=tkinter.Text(entry_frame_stu,width=30,height=2,font=small_font)
+tkinter.Label(entry_frame_stu, text="Student Names", height = 1, anchor="w",bg=palette.get("frame"),fg=palette.get("lighttext")).pack(side = "top", padx="10", pady="10")
+tkinter.Label(entry_frame_stu,wraplength=190, bg=palette.get("frame"),text="Organize the names in the same order as the scans\nExample: \n    Tanner Moore \n    Emily Hunt\n    Foster Holmes\n    Bailey Alexander\n    ...",anchor="w", font=small_font,fg=palette.get("lighttext"),justify="left").pack(side="bottom", padx="10", pady="10")
+stu_names_box=tkinter.Text(entry_frame_stu,width=30,height=2,font=small_font, bg=palette.get("whitespace"))
 stu_names_box.pack(padx="10",fill="both",expand="yes")
 
 
