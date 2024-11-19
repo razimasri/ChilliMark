@@ -1,32 +1,29 @@
 # import the necessary packages
 # as a beginner I am avoiding renaming and only importing specifics so that I can be clear where each thing comes from
 #from imutils.perspective import four_point_transform #will needto import again when I deal with scans
-import tkinter.filedialog
+
 import imutils.contours
 import imutils
 
 import numpy
 import cv2
 import tkinter
+import tkinter.messagebox
 
 from matplotlib import pyplot
 
-def crop_area(image, instructions="Select Area",blur=False):
+def select_area(image, instructions="Select Area",blur=False):
     """ Create temporary small version then rescale to input image"""
     
     height, width = image.shape[:2]
+    print(height,width)
     temp = image.copy()
     if blur:
-    	temp = cv2.GaussianBlur(temp,(5,5),0)
-    
-    if height>width:
-        scale = height/705
-        width = int(width/scale)
-        height = 705
-    else:
-        scale = width/1200
-        height = int(height/scale)
-        width = 1200
+        temp = cv2.GaussianBlur(temp,(5,5),0) 
+    scale = height/705
+    width = int(width/scale)
+    height = 705
+
     
     temp = cv2.resize(temp, (width,height)) 
     cv2.putText(temp,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(255, 255, 255),10,lineType=cv2.LINE_AA) 
@@ -40,11 +37,13 @@ def crop_area(image, instructions="Select Area",blur=False):
     h= int((h+10)*scale)
     
     cv2.destroyAllWindows()
-    return image[y:y+h,x:x+w]
+    print(y,x,h,w)
+    return [y,x,h,w]
 
 def get_thresh_image(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)	
-    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]	
+    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+
     return thresh
 
 def get_contour(image,contour_retrieval_mode):
@@ -61,21 +60,36 @@ def check_fill(contour,thresh,index):
     return fill
 
 def manual_bubble():
-	
-	q_box = crop_area(q_area[0:300,0:400],"Select one EMPTY Bubble")
-
+	yxhw = select_area(q_area[0:500,0:800],"Select one EMPTY Bubble")
+	q_box = q_area[yxhw[0]:yxhw[0]+yxhw[2],yxhw[1]:yxhw[1]+yxhw[3]]
 	cnts,hier = get_contour(q_box,cv2.RETR_EXTERNAL)
-	
 	areas = []
 	for c in cnts:
 		areas.append(cv2.contourArea(c))
-
-	bub = cnts[numpy.argmax(areas)]
-	(_, _, w, h) = cv2.boundingRect(bub)
-	bub_hw = [h,w]
-	bub_fill = check_fill(cnts,get_thresh_image(q_box),-1)
 	
+	bub = cnts[numpy.argmax(areas)]
+	bub = cv2.approxPolyDP(bub, 0.01*cv2.arcLength(bub, True), True)
+	
+	
+	(x, y, w, h) = cv2.boundingRect(bub)
+
+	p1 = numpy.matrix([[x, y]])
+	p2 = numpy.matrix([[x + w, y]])
+	p3 = numpy.matrix([[x + w, y + h]])
+	p4 = numpy.matrix([[x, y + h]])
+
+	box = list(numpy.array([[p1, p2, p3, p4]]))
+	bub_hw = [h,w]
+	bub_fill = cv2.countNonZero(get_thresh_image(q_box))
+	#bub = cv2.minAreaRect(bub)
+	#bub = cv2.boxPoints(bub)
+	#cv2.drawContours(q_area,bub,-1,(0,0,255),10)
+
+	#cv2.imshow("image", q_area)
+	#if cv2.waitKey() == 27:
+		#cv2.destroyAllWindows()
 	bub -= contour_center(bub)
+
 	return bub_hw, bub_fill, bub
 
 def	contour_center(cnt):
@@ -126,26 +140,37 @@ def sort_into_columns(bubbles):
 			jump = x-prev_x
 		
 		columns[col_index].append(bubble)
-
 		prev_x = x
 		
 	for item in count:
+		print(count)
 		if item == count[0]:
 			choices = count[0]
 		else:
 			return print("Detecting inconsistent choice number")
 
-
 	for i, column in enumerate(columns):
 		columns[i],_ = imutils.contours.sort_contours(column, method="top-to-bottom")
 		colour_index = (i%choices) 
-		cv2.drawContours(temp_image, columns[i], -1, colours[colour_index], 3)
-		
-		
-
+		cv2.drawContours(temp_image, columns[i], -1, colours[colour_index], 10)
 
 	show_image(q_area,temp_image)
+	missing_bubbles(temp_image)
+
 	return columns, choices
+
+def missing_bubbles(image):
+	global bub
+
+	missing = select_area(image, "Select Missing Bubble")
+	selected = image[missing[0]:missing[2]+missing[0],missing[1]:missing[1]+missing[3]]
+	cnts,__ = get_contour(selected,cv2.RETR_EXTERNAL)
+	cv2.drawContours(selected, cnts, -1, colours[5], 10)
+	cv2.imshow("image", selected)
+	if cv2.waitKey() == 27:
+		cv2.destroyAllWindows()
+	
+
 
 def find_questions(columns,choices):
 	"""Goes through the columns to buid sets of contours based on use define number of choices"""
@@ -199,7 +224,7 @@ def find_answers(questions,bub_fill):
 		if ans_key_nums.get(q) != None:
 			temp_image = add_markup(colours[1],question[ans_key_nums.get(q)],ans_key_letters.get(q),temp_image)
 			temp_image = cv2.drawContours(temp_image, question, ans_key_nums.get(q), colours[1], 3)		
-	#show_image(q_area,temp_image)
+	show_image(q_area,temp_image)
 	let_answers=answers[:]
 
 	for a, answer in enumerate(answers):
@@ -210,8 +235,12 @@ def find_answers(questions,bub_fill):
 			let_answers[a] = answer
 
 	return answers, let_answers, temp_image
+
 def set_markup_size(contour):
-	_,_,w,h = cv2.boundingRect(contour)
+	global bub_hw
+	h=bub_hw[0]
+	w=bub_hw[1]
+
 	text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, 3, 3)[0]
 	text_shift = [0,0]
 	if text_size [1]>h*1.2:	
@@ -248,17 +277,19 @@ def show_image(original,modified):
 	pyplot.title('modified Image'), pyplot.xticks([]), pyplot.yticks([])
 	pyplot.show()
 
-def main(filename,ans_nums,ans_letters):	#saw some stuff on git on the proper way to do this.
+def main(scan,ans_nums,ans_letters):	#saw some stuff on git on the proper way to do this.
 
 
-	global colours, text_shift, font_size, q_area,ans_key_nums,ans_key_letters
+	global colours, text_shift, font_size, q_area,ans_key_nums,ans_key_letters, bub, bub_hw
 	ans_key_nums = ans_nums
 	ans_key_letters = ans_letters
 
 	#key = {"A":0,"B":1,"C":2,"D":3,"E":4,"F":5, "Unclear":"Unclear"}
 	colours = [(200,0,0),(0,170,0),(0,0,200),(220,200,0),(200,0,200),(0,200,200)] 
-	image = cv2.imread(filename)
-	q_area = crop_area(image.copy(),"Select question area",True)
+	image = numpy.array(scan)
+	yxhw = select_area(image,"Select question area",True)
+	print(yxhw)
+	q_area = image[yxhw[0]:yxhw[0]+yxhw[2],yxhw[1]:yxhw[1]+yxhw[3]]
 	bub_hw, bub_fill, bub = manual_bubble() 
 	text_shift, font_size = set_markup_size(bub)
 	bubbles = find_bubbles(bub_hw,bub)
