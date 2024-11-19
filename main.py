@@ -98,7 +98,7 @@ def mark_exam():
 
 
 root = tkinter.Tk()
-root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="chillimark.ico"))
+#root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="chillimark.ico"))
 root.title("Chilli Marker")
 root.configure(bg="#002b36", borderwidth=2)
 filename=None
@@ -107,7 +107,7 @@ stu_names=None
 scans=[]
 
 root.geometry("1035x750")
-root.resizable(False,False)
+#root.resizable(False,False)
 default_font = tkinter.font.nametofont("TkDefaultFont")
 small_font=default_font.copy()
 default_font.configure(size=14, weight="bold")

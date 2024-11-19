@@ -16,7 +16,7 @@ def select_area(image, instructions="Select Area",blur=False):
     """ Create temporary small version then rescale to input image"""
     
     height, width = image.shape[:2]
-    print(height,width)
+    
     temp = image.copy()
     if blur:
         temp = cv2.GaussianBlur(temp,(5,5),0) 
@@ -73,12 +73,14 @@ def manual_bubble():
 	
 	(x, y, w, h) = cv2.boundingRect(bub)
 
-	p1 = numpy.matrix([[x, y]])
-	p2 = numpy.matrix([[x + w, y]])
-	p3 = numpy.matrix([[x + w, y + h]])
-	p4 = numpy.matrix([[x, y + h]])
+	p1 = [[x, y]]
+	p2 = [[x + w, y]]
+	p3 = [[x + w, y + h]]
+	p4 = [[x, y + h]]
 
-	box = list(numpy.array([[p1, p2, p3, p4]]))
+	#box = numpy.array([[p1, p2, p3, p4]])
+	#box = imutils.grab_contours(box)
+	#bub -= contour_center(box)
 	bub_hw = [h,w]
 	bub_fill = cv2.countNonZero(get_thresh_image(q_box))
 	#bub = cv2.minAreaRect(bub)
@@ -88,7 +90,10 @@ def manual_bubble():
 	#cv2.imshow("image", q_area)
 	#if cv2.waitKey() == 27:
 		#cv2.destroyAllWindows()
-	bub -= contour_center(bub)
+	#print(bub)
+	#print(box)
+	bub = bub-contour_center(bub)
+	#print(bub)
 
 	return bub_hw, bub_fill, bub
 
@@ -101,19 +106,31 @@ def	contour_center(cnt):
 def find_bubbles(bub_hw,bub):
 	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
+	global q_area
+
 	bubbles = []
 	cnts,hier = get_contour(q_area,cv2.RETR_CCOMP)
 
 	for i,c in enumerate(cnts):
-		peri=cv2.arcLength(c,True)
-		c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
-		(_, _, w, h) = cv2.boundingRect(c)
-		if bub_hw[1]*0.8<= w <= bub_hw[1]*1.3 and bub_hw[0]*0.9 <= h <= bub_hw[0]*1.3 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
-			
-			#This maps the default empty bubble onto all
-			bubbles.append(bub + contour_center(c))	
+		(x, y, w, h) = cv2.boundingRect(c)
+		add_good_bubble(bubbles,c,hier,i)
+		if w>bub_hw[1]*2 and bub_hw[0]*0.9 <= h <= bub_hw[0]*1.3 and hier[0][i][3]==-1:
+			cv2.line(q_area,(x+w//2,y-10),(x+w//2,y+h+10),(255,255,255),10)
+			split_image = q_area[y-2:y+h+4,x-2:x+w+4]
+			split_cnts,split_hier= get_contour(split_image,cv2.RETR_EXTERNAL)
+			for j, s in enumerate(split_cnts):
+				add_good_bubble(bubbles,s,split_hier,j)
 
 	return bubbles
+
+def add_good_bubble(array, c, hier,i):
+	peri=cv2.arcLength(c,True)
+	c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
+	(x, y, w, h) = cv2.boundingRect(c)
+	if bub_hw[1]*0.8<= w <= bub_hw[1]*1.3 and bub_hw[0]*0.9 <= h <= bub_hw[0]*1.3 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
+		
+		#This maps the default empty bubble onto all
+		array.append(bub + contour_center(c))	
 
 def sort_into_columns(bubbles):
 	"""Sorts them from left to right. 
@@ -155,7 +172,7 @@ def sort_into_columns(bubbles):
 		cv2.drawContours(temp_image, columns[i], -1, colours[colour_index], 10)
 
 	show_image(q_area,temp_image)
-	missing_bubbles(temp_image)
+	#missing_bubbles(temp_image)
 
 	return columns, choices
 
