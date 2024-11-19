@@ -110,7 +110,7 @@ def find_bubbles(bub_hw,bub):
 		(x, y, w, h) = cv2.boundingRect(c)
 		add_good_bubble(bubbles,c,hier,i)
 		#turn into missing bubbles function?
-		if w > bub_hw[1]*2: #this is where i can alter the logic to get if the box is close to multiples
+		if bub_hw[1]*2<w<bub_hw[1]*4: #this is where i can alter the logic to get if the box is close to multiples
 				
 			scale = w//bub_hw[1]
 

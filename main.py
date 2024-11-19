@@ -13,7 +13,9 @@ import numpy
 
 
 def thumb_grid(doc):
-    grid_size = math.isqrt(len(doc))+1
+    grid_size = 1
+    if len(doc)>1:
+        grid_size = math.isqrt(len(doc))+1
     thumb_size = (500//grid_size-2,705//grid_size-2)
     positions = []
     c=0
@@ -43,10 +45,10 @@ def choose_file():
     
     scans = []
     for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=600, colorspace="RGB")
+        pix = page.get_pixmap(dpi=600, colorspace="RGB") #reduce colour space
         image = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
-        img = PIL.Image.frombytes("RGB", [pix.width, pix.height], pix.samples)        
-        #tkimg = PIL.ImageTk.PhotoImage(img)
+        img = PIL.Image.frombytes("RGB", [pix.width, pix.height], pix.samples)  
+        
         scans.append(image)
         
         thumb = img.thumbnail(thumb_size)
