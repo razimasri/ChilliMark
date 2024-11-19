@@ -37,7 +37,7 @@ def select_area(image, instructions="Select Area",blur=False):
     h= int((h+10)*scale)
     
     cv2.destroyAllWindows()
-    print(y,x,h,w)
+    
     return [y,x,h,w]
 
 def get_thresh_image(image):
@@ -114,20 +114,28 @@ def find_bubbles(bub_hw,bub):
 	for i,c in enumerate(cnts):
 		(x, y, w, h) = cv2.boundingRect(c)
 		add_good_bubble(bubbles,c,hier,i)
-		if w>bub_hw[1]*2 and bub_hw[0]*0.9 <= h <= bub_hw[0]*1.3 and hier[0][i][3]==-1:
-			cv2.line(q_area,(x+w//2,y-10),(x+w//2,y+h+10),(255,255,255),10)
-			split_image = q_area[y-2:y+h+4,x-2:x+w+4]
-			split_cnts,split_hier= get_contour(split_image,cv2.RETR_EXTERNAL)
-			for j, s in enumerate(split_cnts):
-				add_good_bubble(bubbles,s,split_hier,j)
+		if w > bub_hw[1]*2: #this is where i can alter the logic to get if the box is close to multiples
+			scale = w//bub_hw[1]
+			
+			j=1
+			print(scale)
+			while j<scale:
+				cv2.line(q_area,(x+j*w//scale,0),(x+j*w//scale,y+h+10),(255,255,255),1)
+				j+=1
+			
+			split_cnts,_= get_contour(q_area[y-1:y+h+2,x-1:x+w+2],cv2.RETR_EXTERNAL)
+			for s in split_cnts: 
+				s+= [x,y]
+				add_good_bubble(bubbles,s)
 
 	return bubbles
 
-def add_good_bubble(array, c, hier,i):
+def add_good_bubble(array, c, hier=[[[0,0,0,-1]]],i=0):
 	peri=cv2.arcLength(c,True)
 	c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
 	(x, y, w, h) = cv2.boundingRect(c)
 	if bub_hw[1]*0.8<= w <= bub_hw[1]*1.3 and bub_hw[0]*0.9 <= h <= bub_hw[0]*1.3 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
+		bub_img = q_area.copy()	
 		
 		#This maps the default empty bubble onto all
 		array.append(bub + contour_center(c))	
@@ -160,7 +168,7 @@ def sort_into_columns(bubbles):
 		prev_x = x
 		
 	for item in count:
-		print(count)
+		
 		if item == count[0]:
 			choices = count[0]
 		else:
@@ -221,7 +229,7 @@ def find_answers(questions,bub_fill):
 		answer = []
 		for b,bubble in enumerate(question):
 			fill = check_fill(question,q_thresh,b)
-			if fill < bub_fill*1.3:
+			if fill < bub_fill*1.2:
 				fill = 0
 			else:
 				#temp_image = add_markup(colours[0],bubble,key.get(b),temp_image)
@@ -305,7 +313,7 @@ def main(scan,ans_nums,ans_letters):	#saw some stuff on git on the proper way to
 	colours = [(200,0,0),(0,170,0),(0,0,200),(220,200,0),(200,0,200),(0,200,200)] 
 	image = numpy.array(scan)
 	yxhw = select_area(image,"Select question area",True)
-	print(yxhw)
+	
 	q_area = image[yxhw[0]:yxhw[0]+yxhw[2],yxhw[1]:yxhw[1]+yxhw[3]]
 	bub_hw, bub_fill, bub = manual_bubble() 
 	text_shift, font_size = set_markup_size(bub)
