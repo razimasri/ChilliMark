@@ -66,17 +66,21 @@ def mark_exam():
     ans_key_nums={}
     ans_key_letter={}
     
-    ans_key_input = ans_key_input.replace(",","")
-    ans_key_input = ans_key_input.replace("\n","")
+
+    ans_key_input = "".join(x for x in ans_key_input if x.isalpha())
     ans_key_input = ans_key_input.upper()
+    print(ans_key_input)
     for i, ans in enumerate(ans_key_input): #should make the ans_key in number rather than letters to prevent repeated conversion
+        
         ans_key_nums[i]=ord(ans)-65
         ans_key_letter[i]=ans
-    #print(ans_key)
+    
     
     stu_names_input = stu_names_input.title()
     stu_names = stu_names_input.split("\n")
+    
     for i, name in enumerate(stu_names.copy()):
+        name = "".join(filter(lambda x: not x.isdigit(), name))
         if not name:
             stu_names.pop(i)
         else:
@@ -90,7 +94,8 @@ def mark_exam():
             return
     
     for scan in scans:
-        _,score,marked_image = test_grader.main(scan,ans_key_nums,ans_key_letter)
+        student = [test_grader.main(scan,ans_key_nums,ans_key_letter)]
+        output.append(student)
 
 
 version = ["1.0","Adjuma"]
@@ -115,9 +120,9 @@ filename=None
 ans_key=None
 stu_names=None
 scans=[]
+output =[]
 
 root.geometry("1035x750")
-#root.resizable(False,False)
 default_font = tkinter.font.nametofont("TkDefaultFont")
 small_font=default_font.copy()
 default_font.configure(size=14, weight="bold")

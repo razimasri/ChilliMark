@@ -125,7 +125,7 @@ def find_bubbles(bub_hw,bub):
 
 			mask =cv2.bitwise_not(mask)
 			mask=get_thresh(mask,False)
-			show_image(q_area,mask)
+			#show_image(q_area,mask)
 			split_cnts,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 			for s in split_cnts: 
 				add_good_bubble(bubbles,s)
@@ -181,7 +181,7 @@ def sort_into_columns(bubbles):
 		colour_index = (i%choices) 
 		cv2.drawContours(temp_image, columns[i], -1, colours[colour_index], 10)
 
-	show_image(q_area,temp_image)
+	#show_image(q_area,temp_image)
 	#missing_bubbles(temp_image)
 
 	return columns, choices
@@ -192,10 +192,10 @@ def missing_bubbles(image):
 	missing = select_area(image, "Select Missing Bubble")
 	selected = image[missing[0]:missing[2]+missing[0],missing[1]:missing[1]+missing[3]]
 	cnts,__ = get_contour(selected,cv2.RETR_EXTERNAL)
-	cv2.drawContours(selected, cnts, -1, colours[5], 10)
-	cv2.imshow("image", selected)
-	if cv2.waitKey() == 27:
-		cv2.destroyAllWindows()
+	#cv2.drawContours(selected, cnts, -1, colours[5], 10)
+	#cv2.imshow("image", selected)
+	#if cv2.waitKey() == 27:
+		#cv2.destroyAllWindows()
 	
 def find_questions(columns,choices):
 	"""Goes through the columns to buid sets of contours based on use define number of choices"""
@@ -231,7 +231,7 @@ def find_answers(questions):
 				fill = 0
 			else:
 				temp_image = cv2.drawContours(temp_image, question, b, colours[0], 3)
-				print(fill)
+				#print(fill)
 			
 			answer.append(fill)
 		if ans_key_nums.get(q) != None:
@@ -259,7 +259,10 @@ def find_answers(questions):
 		else:
 			let_answers[a] = answer
 
-	show_image(q_area,temp_image)
+	temp_image= cv2.putText(temp_image,"Score = " + str(score) + "/"+ str(len(ans_key_letters)),(50,50),cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,0),4,cv2.LINE_AA)
+	show_image(temp_image)
+
+	#show_image(q_area,temp_image)
 		
 	return answers, let_answers, temp_image, score
 
@@ -290,11 +293,12 @@ def add_markup(colour,contour,choice,image):
 	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,colour,4,lineType=cv2.LINE_AA) 
 	return image
 
-def show_image(original,modified):
+def show_image(original,modified=None):
 	pyplot.subplot(121),pyplot.imshow(original,cmap = 'gray')
 	pyplot.title('Original Image'), pyplot.xticks([]), pyplot.yticks([])
-	pyplot.subplot(122),pyplot.imshow(modified,cmap = 'gray')
-	pyplot.title('modified Image'), pyplot.xticks([]), pyplot.yticks([])
+	if modified: 
+		pyplot.subplot(122),pyplot.imshow(modified,cmap = 'gray')
+		pyplot.title('modified Image'), pyplot.xticks([]), pyplot.yticks([])
 	pyplot.show()
 
 def main(scan,ans_nums,ans_letters):	#saw some stuff on git on the proper way to do this.
@@ -314,12 +318,12 @@ def main(scan,ans_nums,ans_letters):	#saw some stuff on git on the proper way to
 	bubbles = find_bubbles(bub_hw,bub)
 	columns,choices = sort_into_columns(bubbles)	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
 	questions = find_questions(columns,choices)
+	#split here
 	_, let_ans, marked_img, score = find_answers(questions)
 
-	cv2.putText(marked_img,"Score = " + str(score) + "/"+ str(len(ans_key_letters)),(50,50),cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,0),4,cv2.LINE_AA)
-
 	
-	return let_ans, score, marked_img
+	
+	return [let_ans, score, marked_img]
 
 
     
