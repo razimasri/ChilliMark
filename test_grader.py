@@ -110,25 +110,32 @@ def find_bubbles(bub_hw,bub):
 		(x, y, w, h) = cv2.boundingRect(c)
 		add_good_bubble(bubbles,c,hier,i)
 		#turn into missing bubbles function?
-		if bub_hw[1]*2<w<bub_hw[1]*4: #this is where i can alter the logic to get if the box is close to multiples
+		if bub_hw[1]*2<w<bub_hw[1]*4 or bub_hw[0]*2<w<bub_hw[0]*4: #this is where i can alter the logic to get if the box is close to multiples
 				
-			scale = w//bub_hw[1]
+			x_scale = w//bub_hw[1]
+			y_scale = h//bub_hw[0]
 
 			mask = numpy.zeros(q_area.shape, dtype="uint8") 
 			mask = cv2.drawContours(mask,[c],-1,(255,255,255),-1)
 
 			j=1
 
-			while j<scale:
-				cv2.line(mask,(x+j*w//scale,y-10),(x+j*w//scale,y+h+10),(0,0,0),15)
-				j+=1	
+			while j<x_scale:
+				cv2.line(mask,(x+j*w//x_scale,y-10),(x+j*w//x_scale,y+h+10),(0,0,0),15)
+				j+=1
+
+			k=1
+
+			while k<y_scale:
+				cv2.line(mask,(x-10,y+k*h//y_scale),(x+w+10,y+k*h//y_scale),(0,0,0),15)
+				k+=1
 
 			mask =cv2.bitwise_not(mask)
 			mask=get_thresh(mask,False)
 			#show_image(q_area,mask)
-			split_cnts,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-			for s in split_cnts: 
-				add_good_bubble(bubbles,s)
+			messy,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+			for mess in messy: 
+				add_good_bubble(bubbles,mess)
 
 	return bubbles
 
@@ -186,16 +193,6 @@ def sort_into_columns(bubbles):
 
 	return columns, choices
 
-def missing_bubbles(image):
-	global bub
-
-	missing = select_area(image, "Select Missing Bubble")
-	selected = image[missing[0]:missing[2]+missing[0],missing[1]:missing[1]+missing[3]]
-	cnts,__ = get_contour(selected,cv2.RETR_EXTERNAL)
-	#cv2.drawContours(selected, cnts, -1, colours[5], 10)
-	#cv2.imshow("image", selected)
-	#if cv2.waitKey() == 27:
-		#cv2.destroyAllWindows()
 	
 def find_questions(columns,choices):
 	"""Goes through the columns to buid sets of contours based on use define number of choices"""
