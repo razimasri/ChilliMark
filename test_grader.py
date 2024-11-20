@@ -7,10 +7,9 @@ import imutils
 
 import numpy
 import cv2
-import tkinter
-import tkinter.messagebox
 
-from matplotlib import pyplot
+
+
 
 def select_area(image, instructions="Select Area",blur=False):
     """ Create temporary small version then rescale to input image"""
@@ -193,7 +192,7 @@ def find_answers(questions):
 			if fill <700:
 				fill = 0
 			else:
-				temp_image = cv2.drawContours(temp_image, [bubble], -1, colours[0], 3)	
+				temp_image = cv2.drawContours(temp_image, [bubble], -1, colours[0], 7)	
 			answer.append(fill)
 		if ans_key_nums.get(q) != None:
 			temp_image = add_markup(colours[1],question[ans_key_nums.get(q)],ans_key_letters.get(q),temp_image)	
@@ -210,17 +209,14 @@ def find_answers(questions):
 	for a, answer in enumerate(answers):
 		if answer == ans_key_nums.get(a):
 			score+=1
-			temp_image = cv2.drawContours(temp_image, questions[a], answer, colours[1], 5)
+			temp_image = cv2.drawContours(temp_image, questions[a], answer, colours[1], 10)
 		if type(answer) == int:
 			let_answers[a] = chr(answer+65)
 			let_answers[a]
 		else:
 			let_answers[a] = answer
 
-	temp_image= cv2.putText(temp_image,f"Score = {score} / {len(ans_key_letters)}",(100,100),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),4,cv2.LINE_AA,bottomLeftOrigin=False)
-	show_image(temp_image)
-
-	return answers, let_answers, temp_image, score
+	return let_answers, temp_image, score
 
 def set_markup_size(contour):
 	global bub_hw
@@ -245,43 +241,49 @@ def add_markup(colour,contour,choice,image):
 	text_y = y+text_shift[1]
 	text_x = x+text_shift[0]
 	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,(255,255,255),15,lineType=cv2.LINE_AA) 
-	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,colour,4,lineType=cv2.LINE_AA) 
+	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,colour,7,lineType=cv2.LINE_AA) 
 	return image
 
-def show_image(original,modified=None):
-	pyplot.subplot(121),pyplot.imshow(original,cmap = 'gray')
-	pyplot.title('Original Image'), pyplot.xticks([]), pyplot.yticks([])
-	if modified: 
-		pyplot.subplot(122),pyplot.imshow(modified,cmap = 'gray')
-		pyplot.title('modified Image'), pyplot.xticks([]), pyplot.yticks([])
-	pyplot.show()
 
-def main(scan,ans_nums,ans_letters):	#saw some stuff on git on the proper way to do this.
 
+def main(scans,ans_nums,ans_letters):	#saw some stuff on git on the proper way to do this.
+
+	
 	global colours, text_shift, font_size, q_area,ans_key_nums,ans_key_letters, bub, bub_hw
+
+	
 
 	ans_key_nums = ans_nums
 	ans_key_letters = ans_letters
 	colours = [(200,0,0),(0,170,0),(0,0,200),(220,200,0),(200,0,200),(0,200,200)] 
 
-	image = numpy.array(scan)
-	yxhw = select_area(image,"Select question area",True)
+	image = numpy.array(scans[0])
+	y,x,h,w = select_area(image,"Select question area",True)
 	
-	q_area = image[yxhw[0]:yxhw[0]+yxhw[2],yxhw[1]:yxhw[1]+yxhw[3]]
+	q_area = image[y:y+h,x:x+w]
 	bub_hw, bub = manual_bubble() 
+
+	
+	
 	text_shift, font_size = set_markup_size(bub)
-	#split here into stage one or stage two
 	bubbles = find_bubbles(bub_hw,bub)
 	columns,choices = sort_into_columns(bubbles)	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
 	questions = find_questions(columns,choices)
-
-	_, let_ans, marked_img, score = find_answers(questions)
-
+	marked = []
 	
 	
-	return [let_ans, score, marked_img]
+	
+	for scan in scans:
+		
+		image = numpy.array(scan)
+		let_ans, marked_img, score = find_answers(questions)
+		image[y:y+h,x:x+w]=marked_img
+		image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA,False)
+		image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA,False)
+		image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
+		marked.append([image,score,let_ans])
+
+	return marked
 
 
-    
-    
 

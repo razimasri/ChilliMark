@@ -2,14 +2,20 @@ import tkinter
 import tkinter.filedialog
 import tkinter.font
 import tkinter.messagebox
+import tkinter.ttk
+import tkPDFViewer
+
 
 import PIL.Image
 import PIL.ImageTk
-import cv2
+
 import math
+
+import tkPDFViewer.tkPDFViewer
 import test_grader
 import pymupdf
 import numpy
+import io
 
 
 def thumb_grid(doc):
@@ -40,8 +46,14 @@ def choose_file():
     canvas.grid(padx="10", pady="10", column=0,row=0, sticky="nsew")
 
     doc = pymupdf.open(filename)
+
+    #v1= tkPDFViewer.tkPDFViewer.ShowPdf()
+    #v2 = v1.pdf_view(root, pdf_location=filename, width=525, height=725,load="")
+    #v2.grid(row=0,column = 0)
     
     thumb_size, positions = thumb_grid(doc)
+
+
     
     scans = []
     for i, page in enumerate(doc):
@@ -66,10 +78,8 @@ def mark_exam():
     ans_key_nums={}
     ans_key_letter={}
     
-
     ans_key_input = "".join(x for x in ans_key_input if x.isalpha())
     ans_key_input = ans_key_input.upper()
-    print(ans_key_input)
     for i, ans in enumerate(ans_key_input): #should make the ans_key in number rather than letters to prevent repeated conversion
         
         ans_key_nums[i]=ord(ans)-65
@@ -93,9 +103,29 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
     
+    scans = test_grader.main(scans,ans_key_nums,ans_key_letter)
+    marked_pdf = pymupdf.open()
     for scan in scans:
-        student = [test_grader.main(scan,ans_key_nums,ans_key_letter)]
-        output.append(student)
+        
+        pil_scan = PIL.Image.fromarray(scan[0][:,:,::-1])
+        bio = io.BytesIO()
+        pil_scan.save(bio,"jpeg")
+        bytes_scan = pymupdf.open('jpg',bio.getvalue())
+        pdfbytes = bytes_scan.convert_to_pdf()
+        rect = bytes_scan[0].rect
+        bytes_scan.close()
+        pdf_scan = pymupdf.open("pdf", pdfbytes)
+        page = marked_pdf._newPage(width=rect.width, height=rect.height)
+        page.show_pdf_page(rect,pdf_scan,0)
+
+    path_to_save = tkinter.filedialog.asksaveasfilename(defaultextension='.pdf', initialfile = 'Marked exam')
+    if path_to_save:
+        marked_pdf.save(path_to_save)
+        
+
+        
+
+
 
 
 version = ["1.0","Adjuma"]
@@ -163,8 +193,5 @@ tkinter.Label(entry_frame_stu, text="Student Names", height = 1, anchor="w",bg=p
 tkinter.Label(entry_frame_stu,wraplength=190, bg=palette.get("frame"),text="Organize the names in the same order as the scans\nExample: \n    Tanner Moore \n    Emily Hunt\n    Foster Holmes\n    Bailey Alexander\n    ...",anchor="w", font=small_font,fg=palette.get("lighttext"),justify="left").pack(side="bottom", padx="10", pady="10")
 stu_names_box=tkinter.Text(entry_frame_stu,width=30,height=2,font=small_font, bg=palette.get("whitespace"))
 stu_names_box.pack(padx="10",fill="both",expand="yes")
-
-
-
 
 root.mainloop()
