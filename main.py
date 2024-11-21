@@ -3,17 +3,29 @@ import tkinter.filedialog
 import tkinter.font
 import tkinter.messagebox
 import tkinter.ttk
-import tkPDFViewer
 import os
 import PIL.Image
 import PIL.ImageTk
 import math
-import tkPDFViewer.tkPDFViewer
 import pymupdf
 import numpy
 import io
 import test_grader
 import csv
+import threading
+
+def progress_bar(condition):
+
+    prog_popup=tkinter.Tk()
+    root.configure(bg=palette.get("prog_popup"))
+    bar = tkinter.ttk.Progressbar(prog_popup, orient = tkinter.HORIZONTAL, length = 280, mode = 'indeterminate')
+    bar.pack(side='top', pady = 10, padx=10)
+    wait = threading.Event()
+    while condition.is_alive():
+        bar['value']+=1
+        wait.wait(0.1)
+        prog_popup.update()
+    prog_popup.destroy()
 
 
 def thumb_grid(doc):
@@ -32,27 +44,21 @@ def thumb_grid(doc):
         r+=1
     return thumb_size ,positions
 
+def open_file(filename):
 
-def choose_file():
-    global filename, scans
-    filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+    global scans
 
     if not filename:
         return
+    
     canvas_frame.children.clear()
     canvas = tkinter.Canvas(canvas_frame, bg=palette.get("frame"), height=725, width=523, bd=0, highlightthickness=0, relief='ridge')
     canvas.grid(padx="10", pady="10", column=0,row=0, sticky="nsew")
 
     doc = pymupdf.open(filename)
-
-    #v1= tkPDFViewer.tkPDFViewer.ShowPdf()
-    #v2 = v1.pdf_view(root, pdf_location=filename, width=525, height=725,load="")
-    #v2.grid(row=0,column = 0)
     
     thumb_size, positions = thumb_grid(doc)
 
-
-    
     scans = []
     for i, page in enumerate(doc):
         pix = page.get_pixmap(dpi=600, colorspace="RGB") #reduce colour space
@@ -67,6 +73,18 @@ def choose_file():
         panel.grid(row=positions[i][0], column=positions[i][1])
         panel.config(image=thumb)
         panel.image = thumb
+
+        
+def choose_file():
+    global filename, scans
+
+    filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+    open_thread = threading.Thread(target=open_file, args=[filename])
+    progress_thread = threading.Thread(target=progress_bar, args=[open_thread])
+    progress_thread.start()
+    open_thread.start()
+    
+
 
     
 def mark_exam():
@@ -101,50 +119,66 @@ def mark_exam():
     elif not ans_key_nums or not stu_names:
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
-    
+
     marked_work = test_grader.main(scans,ans_key_nums,ans_key_letter)
-    marked_pdf = pymupdf.open()
-
-
-
-    path_to_save = tkinter.filedialog.asksaveasfilename(initialfile = 'Marked exam')
     
+    path_to_save = tkinter.filedialog.asksaveasfilename(initialfile = "Marked Work")
 
+    
     if path_to_save:
+        global writer, marked_pdf
+
         os.mkdir(path_to_save)
-        file = open(f"{path_to_save}/answers.csv", 'w' ,newline='')
-        
-        for i, mark in enumerate(marked_work):
-
-            writer = csv.writer(file, dialect='excel', )
-
-            if stu_names:
-                writer.writerow([stu_names[i]]+[mark[1]]+mark[2])
-            else :
-                writer.writerow([f"Student{i}"]+[mark[1]]+mark[2])
-
-            #deal with pdf
-            pil_scan = PIL.Image.fromarray(mark[0][:,:,::-1])
-            bio = io.BytesIO()
-            pil_scan.save(bio,"jpeg")
-            bytes_scan = pymupdf.open('jpg',bio.getvalue())
-            pdfbytes = bytes_scan.convert_to_pdf()
-            rect = bytes_scan[0].rect
-            bytes_scan.close()
-            pdf_scan = pymupdf.open("pdf", pdfbytes)
-            page = marked_pdf._newPage(width=rect.width, height=rect.height)
-            page.show_pdf_page(rect,pdf_scan,0)
-
-            
-            marked_pdf.save(f"{path_to_save}/answers.pdf")
-            os.startfile(path_to_save)
+                
+        output_thread = threading.Thread(target=make_output,args=(marked_work,path_to_save,ans_key_input))
+        progress_thread = threading.Thread(target=progress_bar, args=[output_thread])
+        progress_thread.start()
+        output_thread.start()
         
 
+        os.startfile(path_to_save)
         
+def make_output(marked_work,path_to_save,ans_key_input):
+    global stu_names
+
+
+    file = open(f"{path_to_save}/answers.csv", 'w' ,newline='')
+    writer = csv.writer(file, dialect='excel', )
+    writer.writerow(["Student Name"]+[f"Out of {len(ans_key_input)}"]+list(ans_key_input))
+    marked_pdf = pymupdf.open()
+    stats_raw = marked_work[0][2]
+    
+    for i, mark in enumerate(marked_work):
+        if stu_names:
+            writer.writerow([stu_names[i]]+[mark[1]]+mark[2])
+        else:
+            writer.writerow([f"Student {i+1}"]+[mark[1]]+mark[2])
+
+        pil_scan = PIL.Image.fromarray(mark[0][:,:,::-1])
+        bio = io.BytesIO()
+        pil_scan.save(bio,"jpeg")
+        bytes_scan = pymupdf.open('jpg',bio.getvalue())
+        pdfbytes = bytes_scan.convert_to_pdf()
+        rect = bytes_scan[0].rect
+        bytes_scan.close()
+        pdf_scan = pymupdf.open("pdf", pdfbytes)
+        page = marked_pdf._newPage(width=rect.width, height=rect.height)
+        page.show_pdf_page(rect,pdf_scan,0)  
+
+        #deal with stats of answers
+        if i >0:
+            stats_raw = zip(stats_raw,mark[2])
+
+    for stat in stats_raw:
+        print(stat)
+
+
+    print(stats_raw)
+    
+    marked_pdf.save(f"{path_to_save}/answers.pdf")
 
     
-
-        
+    
 
 
 
@@ -165,10 +199,13 @@ palette = {
     "whitespace" : "#e3e5ef",
     "lighttext" : "#e3e5ef",
     "bg": "#8c1529",
-    "button": "#b1a1a4"}
+    "button": "#b1a1a4",
+    "prog_popup": "#02251a",
+    "prog_bar":"#00713e"}
+
 root.configure(bg=palette.get("bg"), borderwidth=2)
 filename=None
-ans_key=None
+
 stu_names=None
 scans=[]
 output =[]
@@ -195,10 +232,11 @@ btn_frame.grid(padx=(0,10), pady="10",column=1,row=0, sticky="nsew")
 
 file_btn=tkinter.Button(btn_frame, text="Select Exam", height = 1, width = 20, borderwidth=3, command=choose_file)
 file_btn.pack(side="top",pady=(0,10))
-entry_frame = tkinter.Frame(btn_frame,bg=palette.get("frame"), height= 500)
-entry_frame.pack(fill="both", expand="yes")
 mark_btn=tkinter.Button(btn_frame, text="Mark Exams", height = 3, width = 20,borderwidth=3, command=mark_exam)
 mark_btn.pack(side="bottom",pady=(10,0))
+entry_frame = tkinter.Frame(btn_frame,bg=palette.get("frame"), height= 500)
+entry_frame.pack(side = "bottom", fill="both", expand="yes")
+
 
 entry_frame_ans= tkinter.Frame(entry_frame,bg=palette.get("frame"))
 entry_frame_ans.pack(side="left", padx=(0,10), pady="10",fill="both", expand="yes")
@@ -214,5 +252,6 @@ tkinter.Label(entry_frame_stu, text="Student Names", height = 1, anchor="w",bg=p
 tkinter.Label(entry_frame_stu,wraplength=190, bg=palette.get("frame"),text="Organize the names in the same order as the scans\nExample: \n    Tanner Moore \n    Emily Hunt\n    Foster Holmes\n    Bailey Alexander\n    ...",anchor="w", font=small_font,fg=palette.get("lighttext"),justify="left").pack(side="bottom", padx="10", pady="10")
 stu_names_box=tkinter.Text(entry_frame_stu,width=30,height=2,font=small_font, bg=palette.get("whitespace"))
 stu_names_box.pack(padx="10",fill="both",expand="yes")
+
 
 root.mainloop()

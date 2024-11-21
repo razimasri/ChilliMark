@@ -4,11 +4,13 @@ and scipy
 
 added matplot lib to see ouputs
 
-
+To Do:
 Need to add way to iterate through multiple images (still think PDF is best way)
-way to define the key
-way to set student name
-way to preprogram list of students names. From set
+way to address unclear answers
+final progress bar
+Unswkew and rotate
+
+rate analysis
 
 Reintroduce skew and rotation fixing 
 
