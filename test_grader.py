@@ -4,9 +4,11 @@
 
 import imutils.contours
 import imutils
-
 import numpy
 import cv2
+import threading
+import tkinter
+import tkinter.ttk
 
 
 
@@ -35,10 +37,10 @@ def select_area(image, instructions="Select Area",blur=False):
     cv2.destroyAllWindows()
     return [y,x,h,w]
 
-def manual_bubble():
+def manual_bubble(q_area):
 	yxhw = select_area(q_area[0:500,0:800],"Select one EMPTY Bubble")
 	q_box = q_area[yxhw[0]:yxhw[0]+yxhw[2],yxhw[1]:yxhw[1]+yxhw[3]]
-	cnts,hier = get_contour(q_box,cv2.RETR_EXTERNAL,False)
+	cnts,_ = get_contour(q_box,cv2.RETR_EXTERNAL,False)
 	areas = []
 	for c in cnts:
 		areas.append(cv2.contourArea(c))
@@ -81,10 +83,22 @@ def	contour_center(cnt):
 	cy = int(M['m01']/M['m00'])
 	return [cx,cy]
 
-def find_bubbles(bub_hw,bub):
-	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
+def progress_bar():
 
-	global q_area
+	global processing
+
+	progress_window=tkinter.Tk()
+	bar = tkinter.ttk.Progressbar(progress_window, orient = tkinter.HORIZONTAL, length = 280, mode = 'indeterminate')
+	bar.pack(side='top', pady = 10, padx=10)
+	wait = threading.Event()
+	while processing:
+		bar['value']+=1
+		wait.wait(0.1)
+		progress_window.update()
+	progress_window.destroy()
+
+def find_bubbles(bub_hw,bub,q_area):
+	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
 	bubbles = []
 	cnts,hier = get_contour(q_area,cv2.RETR_CCOMP)
@@ -95,7 +109,7 @@ def find_bubbles(bub_hw,bub):
 		#turn into missing bubbles function? Given up cos that keep breaking it
 		if bub_hw[1]*2<w<bub_hw[1]*4 or bub_hw[0]*2<h<bub_hw[0]*4: #this is where i can alter the logic to get if the box is close to multiples
 				
-			mask = messy_mask(c,x,y,w,h)
+			mask = messy_mask(c,x,y,w,h,q_area)
 			messy,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 			for mess in messy: 
 				add_good_bubble(bubbles,mess)
@@ -106,10 +120,9 @@ def add_good_bubble(array, c, hier=[[[0,0,0,-1]]],i=0):
 	c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
 	(x, y, w, h) = cv2.boundingRect(c)
 	if bub_hw[1]*0.8<= w <= bub_hw[1]*1.3 and bub_hw[0]*0.9 <= h <= bub_hw[0]*1.3 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
-		bub_img = q_area.copy()	
 		array.append(bub + contour_center(c))	
 
-def messy_mask(c,x,y,w,h):
+def messy_mask(c,x,y,w,h,q_area):
 	x_scale = w//bub_hw[1]
 	y_scale = h//bub_hw[0]
 	mask = numpy.zeros(q_area.shape, dtype="uint8") 
@@ -135,10 +148,9 @@ def sort_into_columns(bubbles):
 	prev_x=0
 	jump = 1000
 	col_index = 0
-	temp_image = q_area.copy()
 	count=[1]
 	for i, bubble in enumerate(bubbles):	 
-		x,y,w,h= cv2.boundingRect(bubble)
+		x,_,w,_= cv2.boundingRect(bubble)
 		if abs(x-prev_x) > w//2 and i>0:
 			col_index +=1
 			columns.append([])
@@ -157,8 +169,8 @@ def sort_into_columns(bubbles):
 
 	for i, column in enumerate(columns):
 		columns[i],_ = imutils.contours.sort_contours(column, method="top-to-bottom")
-		colour_index = (i%choices) 
-		cv2.drawContours(temp_image, columns[i], -1, colours[colour_index], 10)
+		#colour_index = (i%choices) 
+		#cv2.drawContours(temp_image, columns[i], -1, colours[colour_index], 10)
 
 	return columns, choices
 
@@ -166,11 +178,10 @@ def sort_into_columns(bubbles):
 def find_questions(columns,choices):
 	"""Goes through the columns to buid sets of contours based on use define number of choices"""
 
-	temp_image = q_area.copy()
 	questions=[]
 	c=0
-	while c < len(columns): #did not use zip as I would have to import zip longest to iterate through flexible choices lenght
-		for r, row in enumerate(columns[c]):
+	while c < len(columns): 
+		for r, _ in enumerate(columns[c]):
 			i=0
 			question=[]
 			while i<choices:
@@ -178,17 +189,16 @@ def find_questions(columns,choices):
 				i+=1
 			questions.append(question)
 		c+=choices
-	#for q, question in enumerate(questions):
-	#	cv2.drawContours(temp_image, question, -1, colours[q%6], 3)
+
 	return questions
 
-def find_answers(questions):
+def find_answers(questions,temp_image):
+
 	answers = []
-	temp_image = q_area.copy()
 	for q,question in enumerate(questions):
 		answer = []
 		for bubble in question:
-			fill = check_fill(bubble,q_area)
+			fill = check_fill(bubble,temp_image)
 			if fill <700:
 				fill = 0
 			else:
@@ -226,7 +236,7 @@ def set_markup_size(contour):
 	text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, 4, 4)[0]
 	text_shift = [0,0]
 	if text_size [1]>h*1.2:	
-		font_size=1.5
+		font_size=3
 		text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, font_size, 4)[0]
 		text_shift[1] = -h//2
 	else:
@@ -240,7 +250,7 @@ def add_markup(colour,contour,choice,image):
 	x,y,_,_ = cv2.boundingRect(contour)
 	text_y = y+text_shift[1]
 	text_x = x+text_shift[0]
-	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,(255,255,255),15,lineType=cv2.LINE_AA) 
+	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,(255,255,255),20,lineType=cv2.LINE_AA) 
 	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, font_size,colour,7,lineType=cv2.LINE_AA) 
 	return image
 
@@ -249,7 +259,7 @@ def add_markup(colour,contour,choice,image):
 def main(scans,ans_nums,ans_letters):	#saw some stuff on git on the proper way to do this.
 
 	
-	global colours, text_shift, font_size, q_area,ans_key_nums,ans_key_letters, bub, bub_hw
+	global colours, text_shift, font_size,ans_key_nums,ans_key_letters, bub, bub_hw
 
 	
 
@@ -257,31 +267,45 @@ def main(scans,ans_nums,ans_letters):	#saw some stuff on git on the proper way t
 	ans_key_letters = ans_letters
 	colours = [(200,0,0),(0,170,0),(0,0,200),(220,200,0),(200,0,200),(0,200,200)] 
 
-	image = numpy.array(scans[0])
-	y,x,h,w = select_area(image,"Select question area",True)
 	
-	q_area = image[y:y+h,x:x+w]
-	bub_hw, bub = manual_bubble() 
+	template = numpy.array(scans[0])
+	template= cv2.resize(template,(4800,6835))
+	y,x,h,w = select_area(template,"Select question area",True)
+
+	bub_hw, bub = manual_bubble(template[y:y+h,x:x+w]) 
 
 	
-	
+	#okay now finish the thing
+	global processing
+	processing = True
+	progress_thread = threading.Thread(target= progress_bar)
+	progress_thread.start()
 	text_shift, font_size = set_markup_size(bub)
-	bubbles = find_bubbles(bub_hw,bub)
-	columns,choices = sort_into_columns(bubbles)	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
-	questions = find_questions(columns,choices)
+
+
+
+	
 	marked = []
 	
-	
-	
 	for scan in scans:
-		
+
 		image = numpy.array(scan)
-		let_ans, marked_img, score = find_answers(questions)
+		image = cv2.resize(image,(4800,6835))
+
+		bubbles = find_bubbles(bub_hw,bub,image[y:y+h,x:x+w])
+		columns,choices = sort_into_columns(bubbles)	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
+		questions = find_questions(columns,choices)
+		let_ans, marked_img, score = find_answers(questions,image[y:y+h,x:x+w])
+
 		image[y:y+h,x:x+w]=marked_img
-		image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA,False)
-		image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA,False)
+
+		if ans_key_letters:
+			image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA,False)
+			image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA,False)
 		image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
 		marked.append([image,score,let_ans])
+
+	processing = False
 
 	return marked
 
