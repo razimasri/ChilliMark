@@ -93,19 +93,18 @@ def mark_exam():
             stu_names.pop(i)
         else:
             stu_names[i]=name.rstrip(", ")
-
+    print(stu_names)
+    
     if filename == None:
         tkinter.messagebox.showinfo(title="No file", message= "Please select a file")
         return
-    elif not ans_key or not stu_names:
+    elif not ans_key_nums or not stu_names:
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
     
     marked_work = test_grader.main(scans,ans_key_nums,ans_key_letter)
     marked_pdf = pymupdf.open()
 
-    if stu_names:
-        marked_work = zip(marked_work,stu_names)
 
 
     path_to_save = tkinter.filedialog.asksaveasfilename(initialfile = 'Marked exam')
@@ -115,13 +114,14 @@ def mark_exam():
         os.mkdir(path_to_save)
         file = open(f"{path_to_save}/answers.csv", 'w' ,newline='')
         
-        for mark in marked_work:
+        for i, mark in enumerate(marked_work):
 
             writer = csv.writer(file, dialect='excel', )
+
             if stu_names:
-                writer.writerow(mark[1],mark[2])
-            else:
-                writer.writerow(mark[1],mark[2])
+                writer.writerow([stu_names[i]]+[mark[1]]+mark[2])
+            else :
+                writer.writerow([f"Student{i}"]+[mark[1]]+mark[2])
 
             #deal with pdf
             pil_scan = PIL.Image.fromarray(mark[0][:,:,::-1])
