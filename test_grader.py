@@ -278,7 +278,7 @@ def main(scans,ans_nums,ans_letters):	#saw some stuff on git on the proper way t
 		image = numpy.array(scan)
 		let_ans, marked_img, score = find_answers(questions)
 		image[y:y+h,x:x+w]=marked_img
-		image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA,False)
+		image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA,False)
 		image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA,False)
 		image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
 		marked.append([image,score,let_ans])

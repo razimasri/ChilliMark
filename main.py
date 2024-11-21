@@ -4,18 +4,16 @@ import tkinter.font
 import tkinter.messagebox
 import tkinter.ttk
 import tkPDFViewer
-
-
+import os
 import PIL.Image
 import PIL.ImageTk
-
 import math
-
 import tkPDFViewer.tkPDFViewer
-import test_grader
 import pymupdf
 import numpy
 import io
+import test_grader
+import csv
 
 
 def thumb_grid(doc):
@@ -69,10 +67,11 @@ def choose_file():
         panel.grid(row=positions[i][0], column=positions[i][1])
         panel.config(image=thumb)
         panel.image = thumb
-    
+
     
 def mark_exam():
     global filename, scans
+
     ans_key_input=ans_key_box.get(1.0, "end-1c")
     stu_names_input=stu_names_box.get(1.0, "end-1c")
     ans_key_nums={}
@@ -90,7 +89,6 @@ def mark_exam():
     stu_names = stu_names_input.split("\n")
     
     for i, name in enumerate(stu_names.copy()):
-        name = "".join(filter(lambda x: not x.isdigit(), name))
         if not name:
             stu_names.pop(i)
         else:
@@ -103,25 +101,48 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
     
-    scans = test_grader.main(scans,ans_key_nums,ans_key_letter)
+    marked_work = test_grader.main(scans,ans_key_nums,ans_key_letter)
     marked_pdf = pymupdf.open()
-    for scan in scans:
-        
-        pil_scan = PIL.Image.fromarray(scan[0][:,:,::-1])
-        bio = io.BytesIO()
-        pil_scan.save(bio,"jpeg")
-        bytes_scan = pymupdf.open('jpg',bio.getvalue())
-        pdfbytes = bytes_scan.convert_to_pdf()
-        rect = bytes_scan[0].rect
-        bytes_scan.close()
-        pdf_scan = pymupdf.open("pdf", pdfbytes)
-        page = marked_pdf._newPage(width=rect.width, height=rect.height)
-        page.show_pdf_page(rect,pdf_scan,0)
 
-    path_to_save = tkinter.filedialog.asksaveasfilename(defaultextension='.pdf', initialfile = 'Marked exam')
+    if stu_names:
+        marked_work = zip(marked_work,stu_names)
+
+
+    path_to_save = tkinter.filedialog.asksaveasfilename(initialfile = 'Marked exam')
+    
+
     if path_to_save:
-        marked_pdf.save(path_to_save)
+        os.mkdir(path_to_save)
+        file = open(f"{path_to_save}/answers.csv", 'w' ,newline='')
         
+        for mark in marked_work:
+
+            writer = csv.writer(file, dialect='excel', )
+            if stu_names:
+                writer.writerow(mark[1],mark[2])
+            else:
+                writer.writerow(mark[1],mark[2])
+
+            #deal with pdf
+            pil_scan = PIL.Image.fromarray(mark[0][:,:,::-1])
+            bio = io.BytesIO()
+            pil_scan.save(bio,"jpeg")
+            bytes_scan = pymupdf.open('jpg',bio.getvalue())
+            pdfbytes = bytes_scan.convert_to_pdf()
+            rect = bytes_scan[0].rect
+            bytes_scan.close()
+            pdf_scan = pymupdf.open("pdf", pdfbytes)
+            page = marked_pdf._newPage(width=rect.width, height=rect.height)
+            page.show_pdf_page(rect,pdf_scan,0)
+
+            
+            marked_pdf.save(f"{path_to_save}/answers.pdf")
+            os.startfile(path_to_save)
+        
+
+        
+
+    
 
         
 
