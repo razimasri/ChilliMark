@@ -137,8 +137,6 @@ def mark_exam():
         progress_thread.start()
         output_thread.start()
         
-
-        
         
 def make_output(marked_work,path_to_save,ans_key_input):
     global stu_names
@@ -170,7 +168,6 @@ def make_output(marked_work,path_to_save,ans_key_input):
         page = marked_pdf._newPage(width=rect.width, height=rect.height)
         page.show_pdf_page(rect,pdf_scan,0)  
 
-    
         if i>0:
             stats_raw = zip(stats_raw,mark[2])
 
@@ -182,8 +179,7 @@ def make_output(marked_work,path_to_save,ans_key_input):
     rates = {"Correct": 0}
     for option in options:
         rates.update({option : 0})
-        csv_stats.append([option])
-        
+        csv_stats.append([option])       
     for i, row in enumerate(stats_raw):
         rate = rates.copy()
         if i == len(ans_key_input):
@@ -194,7 +190,6 @@ def make_output(marked_work,path_to_save,ans_key_input):
             if ans == ans_key_input[i] and ans_key_input:
                 rate["Correct"] = rate.get("Correct") +1
         stats.append(rate.values())
-
 
     for row in stats:
         for k, r in enumerate(row):
@@ -245,7 +240,7 @@ small_font.configure(size=10)
 root.option_add("*Font", default_font)
 root.columnconfigure(0, weight=1)
 root.rowconfigure(1, weight=1)
-                        
+
 canvas_frame = tkinter.Frame(root,bg=palette.get("frame"), height=725, width=523, bd=0, highlightthickness=0, relief='ridge')
 canvas_frame.grid(padx="10", pady="10", column=0,row=0)
 canvas_frame.columnconfigure(0, weight=1)
