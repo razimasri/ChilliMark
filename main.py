@@ -13,11 +13,12 @@ import io
 import test_grader
 import csv
 import threading
+import cv2
 
 def progress_bar(condition):
 
     prog_popup=tkinter.Tk()
-    root.configure(bg=palette.get("prog_popup"))
+    prog_popup.configure(bg=palette.get("prog_popup"))
     bar = tkinter.ttk.Progressbar(prog_popup, orient = tkinter.HORIZONTAL, length = 280, mode = 'indeterminate')
     bar.pack(side='top', pady = 10, padx=10)
     wait = threading.Event()
@@ -30,8 +31,8 @@ def progress_bar(condition):
 
 def thumb_grid(doc):
     grid_size = 1
-    if len(doc)>1:
-        grid_size = math.isqrt(len(doc))+1
+
+    grid_size = math.isqrt(len(doc))+1*(math.sqrt(len(doc))!=math.isqrt(len(doc)))
     thumb_size = (500//grid_size-2,705//grid_size-2)
     positions = []
     c=0
@@ -73,6 +74,7 @@ def open_file(filename):
         panel.grid(row=positions[i][0], column=positions[i][1])
         panel.config(image=thumb)
         panel.image = thumb
+    return
 
         
 def choose_file():
@@ -80,6 +82,7 @@ def choose_file():
 
     filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
     open_thread = threading.Thread(target=open_file, args=[filename])
+    open_thread.daemon=True
     progress_thread = threading.Thread(target=progress_bar, args=[open_thread])
     progress_thread.start()
     open_thread.start()
@@ -88,7 +91,7 @@ def choose_file():
 
     
 def mark_exam():
-    global filename, scans
+    global filename, scans, stu_names
 
     ans_key_input=ans_key_box.get(1.0, "end-1c")
     stu_names_input=stu_names_box.get(1.0, "end-1c")
@@ -136,7 +139,7 @@ def mark_exam():
         output_thread.start()
         
 
-        os.startfile(path_to_save)
+        
         
 def make_output(marked_work,path_to_save,ans_key_input):
     global stu_names
@@ -151,9 +154,12 @@ def make_output(marked_work,path_to_save,ans_key_input):
     for i, mark in enumerate(marked_work):
         if stu_names:
             writer.writerow([stu_names[i]]+[mark[1]]+mark[2])
+            mark[0]=cv2.putText(mark[0],stu_names[i],(300,500),cv2.FONT_HERSHEY_DUPLEX,6,(255,255,255),15)
+            mark[0]=cv2.putText(mark[0],stu_names[i],(300,500),cv2.FONT_HERSHEY_DUPLEX,6,(0,0,0),10)
         else:
             writer.writerow([f"Student {i+1}"]+[mark[1]]+mark[2])
 
+        
         pil_scan = PIL.Image.fromarray(mark[0][:,:,::-1])
         bio = io.BytesIO()
         pil_scan.save(bio,"jpeg")
@@ -165,19 +171,41 @@ def make_output(marked_work,path_to_save,ans_key_input):
         page = marked_pdf._newPage(width=rect.width, height=rect.height)
         page.show_pdf_page(rect,pdf_scan,0)  
 
-        #deal with stats of answers
-        if i >0:
+    
+        if i>0:
             stats_raw = zip(stats_raw,mark[2])
 
-    for stat in stats_raw:
-        print(stat)
-
-
-    print(stats_raw)
-    
     marked_pdf.save(f"{path_to_save}/answers.pdf")
+    #deal with stats of answers
+    stats = [] 
+    options = sorted(set(ans_key_input)) #currently randomly makes 6 choices. Can automate with sets 
+    csv_stats = [["Correct"]]
+    rates = {"Correct": 0}
+    for option in options:
+        rates.update({option : 0})
+        csv_stats.append([option])
+        
+    for i, row in enumerate(stats_raw):
+        rate = rates.copy()
+        if i == len(ans_key_input):
+            break
+        for ans in row:
+            if rate.get(ans):
+                rate[ans]=rate.get(ans) + 1
+            if ans == ans_key_input[i] and ans_key_input:
+                rate["Correct"] = rate.get("Correct") +1
+        stats.append(rate.values())
 
-    
+
+    for row in stats:
+        for k, r in enumerate(row):
+            csv_stats[k].append(r)
+
+    writer.writerow([""])
+    for x in csv_stats:
+        writer.writerow([""]+x)
+        
+    os.startfile(path_to_save)
     
 
 

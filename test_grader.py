@@ -66,10 +66,15 @@ def get_thresh(image,blur=True):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
 
-def check_fill(contour,image):
+def check_fill(contour,image,fraction = False):
     thresh = get_thresh(image,False)
     mask = create_mask(thresh,contour)
-    return cv2.countNonZero(mask)
+    if fraction:
+        fill = round(cv2.countNonZero(mask)/cv2.contourArea(contour),2)
+    else:
+        fill = cv2.countNonZero(mask)
+    print(fill)
+    return fill
 
 def create_mask(thresh,contour):
     mask = numpy.zeros(thresh.shape, dtype="uint8") 
@@ -104,7 +109,9 @@ def find_bubbles(bub_hw,bub,q_area):
 	cnts,hier = get_contour(q_area,cv2.RETR_CCOMP)
 
 	for i,c in enumerate(cnts):
+
 		(x, y, w, h) = cv2.boundingRect(c)
+
 		add_good_bubble(bubbles,c,hier,i)
 		#turn into missing bubbles function? Given up cos that keep breaking it
 		if bub_hw[1]*2<w<bub_hw[1]*4 or bub_hw[0]*2<h<bub_hw[0]*4: #this is where i can alter the logic to get if the box is close to multiples
@@ -113,16 +120,24 @@ def find_bubbles(bub_hw,bub,q_area):
 			messy,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 			for mess in messy: 
 				add_good_bubble(bubbles,mess)
+		elif bub_hw[1]//bub_hw[0]>2 and check_fill(c,q_area,True)>0.5 and bub_hw[1]<w<bub_hw[1]*3 and bub_hw[0]<h<bub_hw[0]*3:
+			cv2.drawContours(q_area, [c], -1, colours[4], 10)
+			cv2.imshow("messy",cv2.resize(q_area,(500,702)))
+			cv2.waitKey(0)
+			bubbles.append(bub + contour_center(c))
 	return bubbles
 
 def add_good_bubble(array, c, hier=[[[0,0,0,-1]]],i=0):
 	peri=cv2.arcLength(c,True)
 	c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
 	(x, y, w, h) = cv2.boundingRect(c)
-	if bub_hw[1]*0.8<= w <= bub_hw[1]*1.3 and bub_hw[0]*0.9 <= h <= bub_hw[0]*1.3 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
+	if bub_hw[1]*0.8<= w <= bub_hw[1]*1.4 and bub_hw[0]*0.8 <= h <= bub_hw[0]*1.4 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
 		array.append(bub + contour_center(c))	
 
 def messy_mask(c,x,y,w,h,q_area):
+	#cv2.drawContours(q_area, columns[i], -1, colours[colour_index], 10)
+	#cv2.imshow("Sort",cv2.resize(q_area,(500,702)))
+	#cv2.waitKey(0)
 	x_scale = w//bub_hw[1]
 	y_scale = h//bub_hw[0]
 	mask = numpy.zeros(q_area.shape, dtype="uint8") 
@@ -138,7 +153,7 @@ def messy_mask(c,x,y,w,h,q_area):
 	mask =cv2.bitwise_not(mask)
 	return get_thresh(mask,False)
 
-def sort_into_columns(bubbles):
+def sort_into_columns(bubbles,temp_image=None):
 	"""Sorts them from left to right. 
 	Then if the gap between the left side of a bubble is more than half the width of a bubble of the previous it makes a new column
 	Columns are then sorted from top to bottom"""
@@ -169,8 +184,11 @@ def sort_into_columns(bubbles):
 
 	for i, column in enumerate(columns):
 		columns[i],_ = imutils.contours.sort_contours(column, method="top-to-bottom")
-		#colour_index = (i%choices) 
+		colour_index = (i%choices) 
+		
 		#cv2.drawContours(temp_image, columns[i], -1, colours[colour_index], 10)
+		#cv2.imshow("Sort",cv2.resize(temp_image,(500,702)))
+		#cv2.waitKey(0)
 
 	return columns, choices
 
@@ -184,7 +202,7 @@ def find_questions(columns,choices):
 		for r, _ in enumerate(columns[c]):
 			i=0
 			question=[]
-			while i<choices:
+			while i<choices:# and i:
 				question.append(columns[c+i][r])
 				i+=1
 			questions.append(question)
@@ -199,7 +217,7 @@ def find_answers(questions,temp_image):
 		answer = []
 		for bubble in question:
 			fill = check_fill(bubble,temp_image)
-			if fill <700:
+			if fill < 700:
 				fill = 0
 			else:
 				temp_image = cv2.drawContours(temp_image, [bubble], -1, colours[0], 7)	
@@ -293,7 +311,7 @@ def main(scans,ans_nums,ans_letters):	#saw some stuff on git on the proper way t
 		image = cv2.resize(image,(4800,6835))
 
 		bubbles = find_bubbles(bub_hw,bub,image[y:y+h,x:x+w])
-		columns,choices = sort_into_columns(bubbles)	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
+		columns,choices = sort_into_columns(bubbles,image[y:y+h,x:x+w])	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
 		questions = find_questions(columns,choices)
 		let_ans, marked_img, score = find_answers(questions,image[y:y+h,x:x+w])
 
