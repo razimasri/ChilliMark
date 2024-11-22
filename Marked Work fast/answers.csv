@@ -1,0 +1,11 @@
+Student Name,Out of 40,A,B,C,D,A,B,C,D,A,B,C,D,A,B,C,D,A,B,C,D,A,B,C,D,A,B,C,D,A,B,C,D,A,B,C,D,A,B,C,D
+Student 1,13,B,C,D,D,A,C,B,D,A,C,C,B,D,C,B,A,C,D,A,B,B,C,C,D,B,A,B,C,B,C,D,D,C,B,C,A,C,B,C,D
+Student 2,4,B,D,B,A,C,C,Unclear,Unclear,A,B,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,D,B,C,C,B,A,D,C,C,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank
+Student 3,0,C,C,B,A,B,C,B,C,D,C,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank,Blank
+Student 4,9,C,C,B,A,A,D,B,C,D,C,B,C,C,A,C,D,B,A,Unclear,D,B,C,A,C,B,D,D,C,D,B,C,A,D,B,C,B,A,C,B,B
+""
+,Correct,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,1,0,0,0
+,A,0,0,0,1,1,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0
+,B,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,1,0,1,0,0,1,1
+,C,1,1,0,0,0,0,0,1,0,1,0,1,1,0,1,0,0,0,0,0,0,1,0,1,0,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0
+,D,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,1,0,1,0,0,0,1,0,0,0,0,0,0,0

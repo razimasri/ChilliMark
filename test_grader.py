@@ -55,31 +55,37 @@ def manual_bubble(q_area):
 
 	return bub_hw, bub
 
-def get_contour(image,contour_retrieval_mode,blur=True):
-	thresh = get_thresh(image)
+def get_contour(image,contour_retrieval_mode,blur=True, version = 1):
+	thresh = get_thresh(image,blur,version)
 	cnts,heir = cv2.findContours(thresh, contour_retrieval_mode, cv2.CHAIN_APPROX_SIMPLE)
 	return cnts, heir 
 
-def get_thresh(image,blur=True):
+def get_thresh(image,blur=True,version=1):
     if blur:
         image = cv2.GaussianBlur(image,(5,5),0)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+    if version == 1:
+        return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+    if version == 2:
+        return cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY_INV)[1]
+        
 
 def check_fill(contour,image,fraction = False):
     thresh = get_thresh(image,False)
-    mask = create_mask(thresh,contour)
+    
     if fraction:
-        fill = round(cv2.countNonZero(mask)/cv2.contourArea(contour),2)
+        x,y,w,h = cv2.boundingRect(contour)
+        fill = round(cv2.countNonZero(thresh[y:y+h,x:x+w])/cv2.contourArea(contour),2)
     else:
+        mask = create_mask(thresh,contour)
         fill = cv2.countNonZero(mask)
-    print(fill)
+    #print(fill)
     return fill
 
 def create_mask(thresh,contour):
     mask = numpy.zeros(thresh.shape, dtype="uint8") 
     x,y,w,h = cv2.boundingRect(contour)
-    mask = cv2.rectangle(mask, (x+10,y+10),(x+w-20,y+h-20),(255,255,255),-1)	
+    mask = cv2.rectangle(mask, (x+20,y+20),(x+w-40,y+h-40),(255,255,255),-1)	
     return cv2.bitwise_and(thresh, thresh, mask=mask)
 
 def	contour_center(cnt):
@@ -97,7 +103,7 @@ def progress_bar():
 	bar.pack(side='top', pady = 10, padx=10)
 	wait = threading.Event()
 	while processing:
-		bar['value']+=1
+		bar['value']+=2
 		wait.wait(0.1)
 		progress_window.update()
 	progress_window.destroy()
@@ -106,42 +112,54 @@ def find_bubbles(bub_hw,bub,q_area):
 	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
 	bubbles = []
-	cnts,hier = get_contour(q_area,cv2.RETR_CCOMP)
-
+	if bub_hw[1]>2*bub_hw[0]:
+		version = 2
+	cnts,hier = get_contour(q_area,cv2.RETR_CCOMP,True,version)
+	#temp = cv2.cvtColor(get_thresh(q_area.copy(),False),cv2.COLOR_GRAY2RGB)
 	for i,c in enumerate(cnts):
 
 		(x, y, w, h) = cv2.boundingRect(c)
+		if hier[0][i][3]==-1 and cv2.contourArea(c)>100:
+			peri=cv2.arcLength(c,True)
+			c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
+			
 
-		add_good_bubble(bubbles,c,hier,i)
-		#turn into missing bubbles function? Given up cos that keep breaking it
-		if bub_hw[1]*2<w<bub_hw[1]*4 or bub_hw[0]*2<h<bub_hw[0]*4: #this is where i can alter the logic to get if the box is close to multiples
-				
-			mask = messy_mask(c,x,y,w,h,q_area)
-			messy,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-			for mess in messy: 
-				add_good_bubble(bubbles,mess)
-		elif bub_hw[1]//bub_hw[0]>2 and check_fill(c,q_area,True)>0.5 and bub_hw[1]<w<bub_hw[1]*3 and bub_hw[0]<h<bub_hw[0]*3:
-			cv2.drawContours(q_area, [c], -1, colours[4], 10)
-			cv2.imshow("messy",cv2.resize(q_area,(500,702)))
-			cv2.waitKey(0)
-			bubbles.append(bub + contour_center(c))
+			if bub_hw[1]*0.8<= w <= bub_hw[1]*2 and bub_hw[0]*0.8 <= h <= bub_hw[0]*2: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
+				#print("good")
+				bubbles.append(bub + contour_center(c))	
+				#cv2.drawContours(temp, [c], -1, colours[y%6], 10)
+				#cv2.imshow("messy",cv2.resize(temp,(500,702)))
+				continue
+			if bub_hw[1]>2*bub_hw[0]:
+				continue
+			if bub_hw[1]*2<w<bub_hw[1]*3 or bub_hw[0]*2<h<bub_hw[0]*3: #this is where i can alter the logic to get if the box is close to multiples
+				mask = messy_mask(c,x,y,w,h,q_area)
+				#print("messy")
+				#cv2.drawContours(temp, [c], -1, colours[y%6], 10)
+				#cv2.imshow("messy",cv2.resize(temp,(500,702)))
+				#cv2.waitKey(0)
+				messy,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+				for mess in messy: 
+					add_good_bubble(bubbles,mess)
+
+
 	return bubbles
 
-def add_good_bubble(array, c, hier=[[[0,0,0,-1]]],i=0):
+def add_good_bubble(array, c):
 	peri=cv2.arcLength(c,True)
 	c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
 	(x, y, w, h) = cv2.boundingRect(c)
-	if bub_hw[1]*0.8<= w <= bub_hw[1]*1.4 and bub_hw[0]*0.8 <= h <= bub_hw[0]*1.4 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
+	if bub_hw[1]*0.8<= w <= bub_hw[1]*1.4 and bub_hw[0]*0.8 <= h <= bub_hw[0]*1.4: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
 		array.append(bub + contour_center(c))	
 
 def messy_mask(c,x,y,w,h,q_area):
-	#cv2.drawContours(q_area, columns[i], -1, colours[colour_index], 10)
-	#cv2.imshow("Sort",cv2.resize(q_area,(500,702)))
-	#cv2.waitKey(0)
+
 	x_scale = w//bub_hw[1]
 	y_scale = h//bub_hw[0]
 	mask = numpy.zeros(q_area.shape, dtype="uint8") 
 	mask = cv2.drawContours(mask,[c],-1,(255,255,255),-1)
+
+
 	j=1
 	while j<x_scale:
 		cv2.line(mask,(x+j*w//x_scale,y-10),(x+j*w//x_scale,y+h+10),(0,0,0),15)
@@ -184,7 +202,7 @@ def sort_into_columns(bubbles,temp_image=None):
 
 	for i, column in enumerate(columns):
 		columns[i],_ = imutils.contours.sort_contours(column, method="top-to-bottom")
-		colour_index = (i%choices) 
+		#colour_index = (i%choices) 
 		
 		#cv2.drawContours(temp_image, columns[i], -1, colours[colour_index], 10)
 		#cv2.imshow("Sort",cv2.resize(temp_image,(500,702)))
@@ -202,7 +220,11 @@ def find_questions(columns,choices):
 		for r, _ in enumerate(columns[c]):
 			i=0
 			question=[]
-			while i<choices:# and i:
+			while i<choices:
+				if len(columns[c])>len(columns[c+i]):
+					#print("missing bubble")
+					i+=1
+					break
 				question.append(columns[c+i][r])
 				i+=1
 			questions.append(question)
@@ -211,19 +233,25 @@ def find_questions(columns,choices):
 	return questions
 
 def find_answers(questions,temp_image):
+	global bub_hw
 
 	answers = []
 	for q,question in enumerate(questions):
 		answer = []
 		for bubble in question:
-			fill = check_fill(bubble,temp_image)
-			if fill < 700:
+			fraction = bub_hw[1]>2*bub_hw[0]
+			fill = check_fill(bubble,temp_image,fraction)
+			
+			if fraction and fill < 0.75:
+				fill = 0
+			elif not fraction and fill <700:
 				fill = 0
 			else:
 				temp_image = cv2.drawContours(temp_image, [bubble], -1, colours[0], 7)	
 			answer.append(fill)
 		if ans_key_nums.get(q) != None:
 			temp_image = add_markup(colours[1],question[ans_key_nums.get(q)],ans_key_letters.get(q),temp_image)	
+
 		max_fill = max(answer)
 		if not max_fill:
 			answers.append("Blank")

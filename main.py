@@ -86,7 +86,6 @@ def choose_file():
     progress_thread = threading.Thread(target=progress_bar, args=[open_thread])
     progress_thread.start()
     open_thread.start()
-    
 
 
     
@@ -190,7 +189,7 @@ def make_output(marked_work,path_to_save,ans_key_input):
         if i == len(ans_key_input):
             break
         for ans in row:
-            if rate.get(ans):
+            if rate.get(ans)!= None:
                 rate[ans]=rate.get(ans) + 1
             if ans == ans_key_input[i] and ans_key_input:
                 rate["Correct"] = rate.get("Correct") +1
