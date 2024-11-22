@@ -111,28 +111,26 @@ def progress_bar():
 def find_bubbles(bub_hw,bub,q_area):
 	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
+	temp = q_area.copy()
 	bubbles = []
+	version = 1
 	if bub_hw[1]>2*bub_hw[0]:
 		version = 2
 	cnts,hier = get_contour(q_area,cv2.RETR_CCOMP,True,version)
-	#temp = cv2.cvtColor(get_thresh(q_area.copy(),False),cv2.COLOR_GRAY2RGB)
 	for i,c in enumerate(cnts):
 
 		(x, y, w, h) = cv2.boundingRect(c)
-		if hier[0][i][3]==-1 and cv2.contourArea(c)>100:
+		if hier[0][i][3]==-1 and cv2.contourArea(c)>0.9*bub_hw[0]*bub_hw[1]:
 			peri=cv2.arcLength(c,True)
 			c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
-			
 
 			if bub_hw[1]*0.8<= w <= bub_hw[1]*2 and bub_hw[0]*0.8 <= h <= bub_hw[0]*2: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
 				#print("good")
 				bubbles.append(bub + contour_center(c))	
-				#cv2.drawContours(temp, [c], -1, colours[y%6], 10)
-				#cv2.imshow("messy",cv2.resize(temp,(500,702)))
 				continue
 			if bub_hw[1]>2*bub_hw[0]:
 				continue
-			if bub_hw[1]*2<w<bub_hw[1]*3 or bub_hw[0]*2<h<bub_hw[0]*3: #this is where i can alter the logic to get if the box is close to multiples
+			if bub_hw[1]*1.5<w<bub_hw[1]*3 or bub_hw[0]*1.5<h<bub_hw[0]*3: #this is where i can alter the logic to get if the box is close to multiples
 				mask = messy_mask(c,x,y,w,h,q_area)
 				#print("messy")
 				#cv2.drawContours(temp, [c], -1, colours[y%6], 10)
@@ -241,12 +239,13 @@ def find_answers(questions,temp_image):
 		for bubble in question:
 			fraction = bub_hw[1]>2*bub_hw[0]
 			fill = check_fill(bubble,temp_image,fraction)
-			
+
 			if fraction and fill < 0.75:
 				fill = 0
-			elif not fraction and fill <700:
+			elif not fraction and fill < 450:
 				fill = 0
 			else:
+				print(fill)
 				temp_image = cv2.drawContours(temp_image, [bubble], -1, colours[0], 7)	
 			answer.append(fill)
 		if ans_key_nums.get(q) != None:
