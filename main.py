@@ -14,6 +14,9 @@ import test_grader
 import csv
 import threading
 import cv2
+import time
+from ctypes import windll
+
 
 def progress_bar(condition):
 
@@ -57,7 +60,6 @@ def open_file(filename):
     canvas.grid(padx="10", pady="10", column=0,row=0, sticky="nsew")
 
     doc = pymupdf.open(filename)
-    
     thumb_size, positions = thumb_grid(doc)
 
     scans = []
@@ -81,6 +83,7 @@ def choose_file():
     global filename, scans
 
     filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+
     open_thread = threading.Thread(target=open_file, args=[filename])
     open_thread.daemon=True
     progress_thread = threading.Thread(target=progress_bar, args=[open_thread])
@@ -122,9 +125,15 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
 
-    marked_work = test_grader.main(scans,ans_key_nums,ans_key_letter)
-    
     path_to_save = tkinter.filedialog.asksaveasfilename(initialfile = "Marked Work")
+    global time1 
+
+    marked_work = test_grader.set_parameters(scans,ans_key_nums,ans_key_letter)
+    #parameters[] read about keywords arg
+    #maybe for scan in scans here so I can make accurate progress bar
+    #marked_work = test_grader.process_scans(scans,ans_keynums,ans_key_letter,parameters)
+    
+    #path_to_save = tkinter.filedialog.asksaveasfilename(initialfile = "Marked Work")
 
     
     if path_to_save:
@@ -198,7 +207,8 @@ def make_output(marked_work,path_to_save,ans_key_input):
     writer.writerow([""])
     for x in csv_stats:
         writer.writerow([""]+x)
-        
+
+
     os.startfile(path_to_save)
     
 
@@ -213,6 +223,8 @@ version = ["1.0","Adjuma"]
 
 
 root = tkinter.Tk()
+windll.shcore.SetProcessDpiAwareness(1)
+
 #root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="chillimark.ico"))
 root.title("Chilli Marker")
 palette = {
