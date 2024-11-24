@@ -16,6 +16,7 @@ import threading
 import cv2
 import time
 from ctypes import windll
+import multiprocessing
 
 
 def progress_bar(condition):
@@ -107,7 +108,6 @@ def mark_exam():
         ans_key_nums[i]=ord(ans)-65
         ans_key_letter[i]=ans
     
-    
     stu_names_input = stu_names_input.title()
     stu_names = stu_names_input.split("\n")
     
@@ -125,26 +125,35 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
 
-    path_to_save = tkinter.filedialog.asksaveasfilename(initialfile = "Marked Work")
-    global time1 
 
-    marked_work = test_grader.set_parameters(scans,ans_key_nums,ans_key_letter)
-    #parameters[] read about keywords arg
-    #maybe for scan in scans here so I can make accurate progress bar
-    #marked_work = test_grader.process_scans(scans,ans_keynums,ans_key_letter,parameters)
+
+    basename= os.path.basename(filename)
+    basename= basename.replace(".pdf","")
+    path_to_save = filename.replace(".pdf","")
+
+    inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2 = test_grader.set_parameters(scans)
     
-    #path_to_save = tkinter.filedialog.asksaveasfilename(initialfile = "Marked Work")
-
     
-    if path_to_save:
-        global writer, marked_pdf
-
+    process_thread = threading.Thread(target=process, args=(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2,path_to_save,ans_key_input))
+    progress_thread = threading.Thread(target=progress_bar, args=[process_thread])
+    progress_thread.start()
+    process_thread.start()
+    
+    
+def process(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2,path_to_save,ans_key_input):
+    start = time.time()
+    marked_work = test_grader.process(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2)
+    
+    global marked_pdf
+    if not(os.path.exists(path_to_save) and os.path.isdir(path_to_save)):
         os.mkdir(path_to_save)
                 
-        output_thread = threading.Thread(target=make_output,args=(marked_work,path_to_save,ans_key_input))
-        progress_thread = threading.Thread(target=progress_bar, args=[output_thread])
-        progress_thread.start()
-        output_thread.start()
+    make_output(marked_work,path_to_save,ans_key_input)
+    end = time.time()
+
+    print("time", end-start)
+
+    
         
         
 def make_output(marked_work,path_to_save,ans_key_input):
