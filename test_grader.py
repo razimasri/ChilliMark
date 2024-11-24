@@ -281,6 +281,10 @@ def process(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift
 		marked.append([image,score,let_ans])
 		end = time.time()
 		print("Loop", end - start)
+		icon = cv2.imread("icons\printmark.png")
+
+		image[6323:6579,4288:4544]=icon
+
 	
 
 	return marked
