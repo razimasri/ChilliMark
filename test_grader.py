@@ -79,18 +79,6 @@ def get_thresh(image,blur=True):
 	return cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 25,4)
 
 
-def check_fill(contour,image,thresh):
-
-	mask = numpy.zeros(thresh.shape, dtype="uint8") 
-	x, y, w, h = cv2.boundingRect(contour)
-	mask = cv2.rectangle(mask, (x,y),(x+w,y+h),(255,255,255),-1)	
-	image = cv2.cvtColor(image,cv2.COLOR_RGB2GRAY)
-	mask = cv2.bitwise_and(thresh, thresh, mask)
-	#cv2.imshow("",cv2.resize(mask[y:y+h,x:x+w],(w*4,h*4)))
-	#cv2.waitKey(0)
-	return cv2.countNonZero(mask[y:y+h,x:x+w])
-
-
 
 def	contour_center(contour):
 	M = cv2.moments(contour)
@@ -238,13 +226,15 @@ def find_answers(questions,temp_image):
 	for q,question in enumerate(questions):
 		answer = []
 		for bubble in question:
-			fill_con = inner + contour_center(bubble)
-			fill = check_fill(fill_con,temp_image,thresh)
-			
+			inner = inner + contour_center(bubble)
+			x,y,w,h= cv2.boundingRect(inner)
+			temp = thresh[y:y+h,x:x+w]
+			mask = numpy.zeros(temp.shape, dtype="uint8") 
+			mask = cv2.bitwise_and(temp, temp, mask)
+			fill = cv2.countNonZero(mask)
+
 			if fill < limit:
 				fill = 0
-				if 1.3*fill > limit:
-					print(fill)
 			else:
 				temp_image = cv2.drawContours(temp_image, [bubble], -1, colours[0], 7)	
 			answer.append(fill)
