@@ -16,7 +16,6 @@ import threading
 import cv2
 import time
 from ctypes import windll
-import multiprocessing
 
 
 def progress_bar(condition):
