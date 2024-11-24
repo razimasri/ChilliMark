@@ -82,8 +82,8 @@ def open_file(filename):
 def choose_file():
     global filename, scans
 
-    #filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
-    filename = "igsample.pdf"
+    filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+
     open_thread = threading.Thread(target=open_file, args=[filename])
     open_thread.daemon=True
     progress_thread = threading.Thread(target=progress_bar, args=[open_thread])

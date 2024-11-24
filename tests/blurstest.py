@@ -1,6 +1,7 @@
 import cv2
+import numpy
 
-image = cv2.imread("tests\ig.png")
+image = cv2.imread("tests\ib.png")
 
 
 def test(image):
@@ -13,8 +14,8 @@ def test(image):
 		#cv2.imshow(f"blur is {i}", blur)
 		#cv2.waitKey(0)
 		j=25
-		while j<250:
-			thresh = cv2.threshold(input, 200, 200, cv2.THRESH_BINARY_INV)[1]
+		while j<250:cv2.threshold(input, 200, 200, cv2.THRESH_BINARY_INV)[1]
+			thresh = 
 			#thresh = cv2.adaptiveThreshold(input,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, i,2)
 			cv2.imshow(f"blur is {i} and thres is {j}",thresh)
 			cv2.waitKey(0)
@@ -30,8 +31,13 @@ def test(image):
 input = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
 input = cv2.medianBlur(input,13) 
 thresh = cv2.adaptiveThreshold(input,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 29,5)
-contours,hier = cv2.findContours(thresh,cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
-for c in contours:
-	cv2.drawContours(image, contours,-1,(0,0,255),1,cv2.LINE_AA)
-	cv2.imshow(f"blur is {15} and thres is {200}",image)
-	cv2.waitKey(0)
+contours,_ = cv2.findContours(thresh,cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
+areas = []
+
+in_bub = contours[0]
+x_bub = contours[1]
+
+
+cv2.drawContours(image,[x_bub],-1,(255,0,0))
+cv2.imshow("", image)
+cv2.waitKey()

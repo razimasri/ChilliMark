@@ -6,7 +6,7 @@ import threading
 import tkinter
 import tkinter.ttk
 import time
-
+import math
 
 
 
@@ -39,22 +39,30 @@ def select_area(image, instructions="Select Area",blur=False):
 
 def manual_bubble(image):
 	y1,x1,y2,x2 = select_area(image[0:500,0:800],"Select one EMPTY Bubble")
-	thresh = get_thresh(image[y1:y2,x1:x2],blur=False)
-	cnts,_ = cv2.findContours(thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-	areas = []
-	for c in cnts:
-		areas.append(cv2.contourArea(c))
-	bub = cnts[numpy.argmax(areas)]
+	thresh = get_thresh(image[y1:y2,x1:x2],blur=True)
+
+	bub, _ = cv2.findContours(thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+
+	bub=bub[0]
+
 	bub = cv2.approxPolyDP(bub, 0.01*cv2.arcLength(bub, True), True)		
 
-
-	#cv2.drawContours(image[y1:y2,x1:x2], [bub],-1,(0,0,255),1,cv2.LINE_AA)
-	#cv2.imshow(f"bub",image[y1:y2,x1:x2])
-	#cv2.waitKey(0)
-
-	_, _, w, h = cv2.boundingRect(bub)
+	x, y, w, h = cv2.boundingRect(bub)
+	global inner
+	img = cv2.bitwise_not(thresh)
+	img = cv2.rectangle(img,(x,y),(x+w,y+h),0,14)
+	img = img[y:y+h,x:x+w]
+	inner, _ = cv2.findContours(img,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+	
 	bub_h, bub_w = h, w
+	inner = inner[0]
 	bub = bub-contour_center(bub)
+	inner = inner-contour_center(inner)
+	
+
+
+
+	
 
 	global version
 	if bub_w>bub_h*2:
@@ -74,18 +82,15 @@ def get_thresh(image,blur=True):
 def check_fill(contour,image,thresh):
 
 	mask = numpy.zeros(thresh.shape, dtype="uint8") 
-	x,y,w,h = cv2.boundingRect(contour)
-	mask = cv2.rectangle(mask, (x+20,y+20),(x+w-40,y+h-40),(255,255,255),-1)	
-	mask = create_mask(thresh,contour)
-	cv2.bitwise_and(thresh, thresh, mask=mask)
-	return cv2.countNonZero(mask)
+	x, y, w, h = cv2.boundingRect(contour)
+	mask = cv2.rectangle(mask, (x,y),(x+w,y+h),(255,255,255),-1)	
+	image = cv2.cvtColor(image,cv2.COLOR_RGB2GRAY)
+	mask = cv2.bitwise_and(thresh, thresh, mask)
+	#cv2.imshow("",cv2.resize(mask[y:y+h,x:x+w],(w*4,h*4)))
+	#cv2.waitKey(0)
+	return cv2.countNonZero(mask[y:y+h,x:x+w])
 
 
-def create_mask(thresh,contour):
-    mask = numpy.zeros(thresh.shape, dtype="uint8") 
-    x,y,w,h = cv2.boundingRect(contour)
-    mask = cv2.rectangle(mask, (x+20,y+20),(x+w-40,y+h-40),(255,255,255),-1)	
-    return cv2.bitwise_and(thresh, thresh, mask=mask)
 
 def	contour_center(contour):
 	M = cv2.moments(contour)
@@ -110,23 +115,25 @@ def progress_bar():
 def find_bubbles(bub_h,bub_w,bub,q_area):
 	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
-	#global version
+	global version
 	start = time.time()
 	bubbles = []
 	thresh = get_thresh(q_area)
 	cnts,hier = cv2.findContours(thresh,cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
 	
 	for i,c in enumerate(cnts):
+		#print(hier[0][i][3])
+
 		
-		x, y, w, h = cv2.boundingRect(c)
 		if hier[0][i][3]==-1 and cv2.contourArea(c)>0.8*bub_h*bub_w:
+			x, y, w, h = cv2.boundingRect(c)
 			peri=cv2.arcLength(c,True)
 			c=cv2.approxPolyDP(c,peri*0.02,True) 
 			if bub_w*0.8<= w <= bub_w*2 and bub_h*0.8 <= h <= bub_h*2: 
 				bubbles.append(bub + contour_center(c))
 				continue
-			#if version == "ig":
-			#	continue
+			if version == "ig":
+				continue
 			if bub_w*1.5<w<bub_w*3 or bub_h*1.5<h<bub_h*3: 
 				#print("messy",c)
 				mask = messy_mask(c,x,y,w,h,q_area)
@@ -223,18 +230,23 @@ def find_answers(questions,temp_image):
 
 	start = time.time()
 	answers = []
-	fraction = bub_w>2*bub_h
-	thresh = get_thresh(temp_image,blur=True)
+	gray = cv2.cvtColor(temp_image, cv2.COLOR_BGR2GRAY)
+	gray = cv2.GaussianBlur(gray,(5,5),4)
+	thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV| cv2.THRESH_OTSU)[1]
+	area = cv2.contourArea(inner)
+	limit = 5*math.sqrt(area)
 	for q,question in enumerate(questions):
 		answer = []
 		for bubble in question:
-			fill = check_fill(bubble,temp_image,thresh)
-			if fraction and fill < 0.75:
+			fill_con = inner + contour_center(bubble)
+			fill = check_fill(fill_con,temp_image,thresh)
+			
+			if fill < limit:
 				fill = 0
-			elif fraction == 0 and fill < 2000:
-				fill = 0
+				if 1.3*fill > limit:
+					print(fill)
 			else:
-				temp_image = cv2.drawContours(temp_image, [bubble], -1, colours[5], 7)	
+				temp_image = cv2.drawContours(temp_image, [bubble], -1, colours[0], 7)	
 			answer.append(fill)
 		if ans_key_nums.get(q) != None:
 			temp_image = add_markup(colours[1],question[ans_key_nums.get(q)],ans_key_letters.get(q),temp_image)	
@@ -294,7 +306,7 @@ def set_parameters(scans,ans_nums,ans_letters):	#saw some stuff on git on the pr
 
 	
 	
-	version = "ib"
+	version = None
 	
 	colours = [(200,0,0),(0,170,0),(0,0,200),(220,200,0),(200,0,200),(0,200,200)] 
 
@@ -305,7 +317,7 @@ def set_parameters(scans,ans_nums,ans_letters):	#saw some stuff on git on the pr
 
 	bub_h, bub_w, bub = manual_bubble(template[y1:y2,x1:x2]) 
 
-	version="ib"
+
 	text_shift, font_size = set_markup_size(bub)
 
 	global processing
