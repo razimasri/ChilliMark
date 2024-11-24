@@ -226,8 +226,8 @@ def find_answers(questions,temp_image):
 	for q,question in enumerate(questions):
 		answer = []
 		for bubble in question:
-			inner = inner + contour_center(bubble)
-			x,y,w,h= cv2.boundingRect(inner)
+			fill_con = inner + contour_center(bubble)
+			x,y,w,h= cv2.boundingRect(fill_con)
 			temp = thresh[y:y+h,x:x+w]
 			mask = numpy.zeros(temp.shape, dtype="uint8") 
 			mask = cv2.bitwise_and(temp, temp, mask)
