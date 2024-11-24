@@ -1,7 +1,3 @@
-# import the necessary packages
-# as a beginner I am avoiding renaming and only importing specifics so that I can be clear where each thing comes from
-#from imutils.perspective import four_point_transform #will needto import again when I deal with scans
-
 import imutils.contours
 import imutils
 import numpy
@@ -9,76 +5,95 @@ import cv2
 import threading
 import tkinter
 import tkinter.ttk
-
+import time
+import math
 
 
 
 def select_area(image, instructions="Select Area",blur=False):
-    """ Create temporary small version then rescale to input image"""
-    
-    height, width = image.shape[:2]
-    temp = image.copy()
-    if blur:
-        temp = cv2.GaussianBlur(temp,(5,5),0) 
-    scale = height/705
-    width = int(width/scale)
-    height = 705
-    
-    temp = cv2.resize(temp, (width,height)) 
-    cv2.putText(temp,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(255, 255, 255),10,lineType=cv2.LINE_AA) 
-    cv2.putText(temp,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(1, 1, 1),2,lineType=cv2.LINE_AA) 
-    cv2.putText(temp,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(200, 10, 145),1,lineType=cv2.LINE_AA) 
-    
-    x,y,w,h = cv2.selectROI(instructions, temp, fromCenter=False,showCrosshair=True)
-    x= int((x-3)*scale) 
-    y= int((y-3)*scale) 
-    w= int((w+6)*scale) 
-    h= int((h+6)*scale)
-    cv2.destroyAllWindows()
-    return [y,x,h,w]
+	image = image.copy()
+	if blur:
+		image = cv2.GaussianBlur(image,(19,19),3) 
 
-def manual_bubble(q_area):
-	yxhw = select_area(q_area[0:500,0:800],"Select one EMPTY Bubble")
-	q_box = q_area[yxhw[0]:yxhw[0]+yxhw[2],yxhw[1]:yxhw[1]+yxhw[3]]
-	cnts,_ = get_contour(q_box,cv2.RETR_EXTERNAL,False)
-	areas = []
-	for c in cnts:
-		areas.append(cv2.contourArea(c))
+	height, width = image.shape[:2]
+	
+	scale = height/705
+	width = int(width/scale)
+	height = 705
 
-	bub = cnts[numpy.argmax(areas)]
-	bub = cv2.approxPolyDP(bub, 0.01*cv2.arcLength(bub, True), True)
-		
-	(_, _, w, h) = cv2.boundingRect(bub)
+	image = cv2.resize(image, (width,height)) 
+	cv2.putText(image,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(255, 255, 255),10,lineType=cv2.LINE_AA) 
+	cv2.putText(image,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(1, 1, 1),2,lineType=cv2.LINE_AA) 
+	cv2.putText(image,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(200, 10, 145),1,lineType=cv2.LINE_AA) 
 
-	bub_hw = [h,w]
+	x,y,w,h = cv2.selectROI(instructions, image)
+	while not x:
+		x,y,w,h = cv2.selectROI(instructions, image)
+	cv2.destroyAllWindows()
+	x1= int((x-3)*scale) 
+	y1= int((y-3)*scale) 
+	x2= int((w+6)*scale) + x1
+	y2= int((h+6)*scale) + y1
+
+	return y1,x1,y2,x2,
+
+def manual_bubble(image):
+	y1,x1,y2,x2 = select_area(image[0:500,0:800],"Select one EMPTY Bubble")
+	thresh = get_thresh(image[y1:y2,x1:x2],blur=True)
+
+	bub, _ = cv2.findContours(thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+
+	bub=bub[0]
+
+	bub = cv2.approxPolyDP(bub, 0.01*cv2.arcLength(bub, True), True)		
+
+	x, y, w, h = cv2.boundingRect(bub)
+	global inner
+	img = cv2.bitwise_not(thresh)
+	img = cv2.rectangle(img,(x,y),(x+w,y+h),0,14)
+	img = img[y:y+h,x:x+w]
+	inner, _ = cv2.findContours(img,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+	
+	bub_h, bub_w = h, w
+	inner = inner[0]
 	bub = bub-contour_center(bub)
+	inner = inner-contour_center(inner)
+	
 
-	return bub_hw, bub
 
-def get_contour(image,contour_retrieval_mode,blur=True):
-	thresh = get_thresh(image)
-	cnts,heir = cv2.findContours(thresh, contour_retrieval_mode, cv2.CHAIN_APPROX_SIMPLE)
-	return cnts, heir 
+
+	
+
+	global version
+	if bub_w>bub_h*2:
+		version = "ig"
+	else:
+		version = "ib"
+
+	return bub_h, bub_w, bub
 
 def get_thresh(image,blur=True):
-    if blur:
-        image = cv2.GaussianBlur(image,(5,5),0)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+	if blur:
+		image = cv2.medianBlur(image,7)
+	image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+	return cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 25,4)
 
-def check_fill(contour,image):
-    thresh = get_thresh(image,False)
-    mask = create_mask(thresh,contour)
-    return cv2.countNonZero(mask)
 
-def create_mask(thresh,contour):
-    mask = numpy.zeros(thresh.shape, dtype="uint8") 
-    x,y,w,h = cv2.boundingRect(contour)
-    mask = cv2.rectangle(mask, (x+10,y+10),(x+w-20,y+h-20),(255,255,255),-1)	
-    return cv2.bitwise_and(thresh, thresh, mask=mask)
+def check_fill(contour,image,thresh):
 
-def	contour_center(cnt):
-	M = cv2.moments(cnt)
+	mask = numpy.zeros(thresh.shape, dtype="uint8") 
+	x, y, w, h = cv2.boundingRect(contour)
+	mask = cv2.rectangle(mask, (x,y),(x+w,y+h),(255,255,255),-1)	
+	image = cv2.cvtColor(image,cv2.COLOR_RGB2GRAY)
+	mask = cv2.bitwise_and(thresh, thresh, mask)
+	#cv2.imshow("",cv2.resize(mask[y:y+h,x:x+w],(w*4,h*4)))
+	#cv2.waitKey(0)
+	return cv2.countNonZero(mask[y:y+h,x:x+w])
+
+
+
+def	contour_center(contour):
+	M = cv2.moments(contour)
 	cx = int(M['m10']/M['m00'])
 	cy = int(M['m01']/M['m00'])
 	return [cx,cy]
@@ -92,39 +107,54 @@ def progress_bar():
 	bar.pack(side='top', pady = 10, padx=10)
 	wait = threading.Event()
 	while processing:
-		bar['value']+=1
+		bar['value']+=2
 		wait.wait(0.1)
 		progress_window.update()
 	progress_window.destroy()
 
-def find_bubbles(bub_hw,bub,q_area):
+def find_bubbles(bub_h,bub_w,bub,q_area):
 	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
+	global version
+	start = time.time()
 	bubbles = []
-	cnts,hier = get_contour(q_area,cv2.RETR_CCOMP)
-
+	thresh = get_thresh(q_area)
+	cnts,hier = cv2.findContours(thresh,cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
+	
 	for i,c in enumerate(cnts):
-		(x, y, w, h) = cv2.boundingRect(c)
-		add_good_bubble(bubbles,c,hier,i)
-		#turn into missing bubbles function? Given up cos that keep breaking it
-		if bub_hw[1]*2<w<bub_hw[1]*4 or bub_hw[0]*2<h<bub_hw[0]*4: #this is where i can alter the logic to get if the box is close to multiples
-				
-			mask = messy_mask(c,x,y,w,h,q_area)
-			messy,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-			for mess in messy: 
-				add_good_bubble(bubbles,mess)
+		#print(hier[0][i][3])
+
+		
+		if hier[0][i][3]==-1 and cv2.contourArea(c)>0.8*bub_h*bub_w:
+			x, y, w, h = cv2.boundingRect(c)
+			peri=cv2.arcLength(c,True)
+			c=cv2.approxPolyDP(c,peri*0.02,True) 
+			if bub_w*0.8<= w <= bub_w*2 and bub_h*0.8 <= h <= bub_h*2: 
+				bubbles.append(bub + contour_center(c))
+				continue
+			if version == "ig":
+				continue
+			if bub_w*1.5<w<bub_w*3 or bub_h*1.5<h<bub_h*3: 
+				#print("messy",c)
+				mask = messy_mask(c,x,y,w,h,q_area)
+				messy,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+				for mess in messy: 
+					add_good_bubble(bubbles,mess)
+
+	end = time.time()
+	print("bubbles", end - start)
 	return bubbles
 
-def add_good_bubble(array, c, hier=[[[0,0,0,-1]]],i=0):
+def add_good_bubble(array, c):
 	peri=cv2.arcLength(c,True)
-	c=cv2.approxPolyDP(c,peri*0.02,True) #approx polly N is not in latest. will need to build from source
-	(x, y, w, h) = cv2.boundingRect(c)
-	if bub_hw[1]*0.8<= w <= bub_hw[1]*1.3 and bub_hw[0]*0.9 <= h <= bub_hw[0]*1.3 and hier[0][i][3]==-1: #q_ratio*0.9 <= ar <= q_ratio*1.1 and 
+	c=cv2.approxPolyDP(c,peri*0.02,True) 
+	_, _, w, h = cv2.boundingRect(c)
+	if bub_w*0.8<= w <= bub_w*1.4 and bub_h*0.8 <= h <= bub_h*1.4:
 		array.append(bub + contour_center(c))	
 
 def messy_mask(c,x,y,w,h,q_area):
-	x_scale = w//bub_hw[1]
-	y_scale = h//bub_hw[0]
+	x_scale = w//bub_w
+	y_scale = h//bub_h
 	mask = numpy.zeros(q_area.shape, dtype="uint8") 
 	mask = cv2.drawContours(mask,[c],-1,(255,255,255),-1)
 	j=1
@@ -136,15 +166,16 @@ def messy_mask(c,x,y,w,h,q_area):
 		cv2.line(mask,(x-10,y+k*h//y_scale),(x+w+10,y+k*h//y_scale),(0,0,0),15)
 		k+=1
 	mask =cv2.bitwise_not(mask)
-	return get_thresh(mask,False)
+	return get_thresh(mask)
 
-def sort_into_columns(bubbles):
+def sort_into_columns(bubbles,img=None):
 	"""Sorts them from left to right. 
 	Then if the gap between the left side of a bubble is more than half the width of a bubble of the previous it makes a new column
 	Columns are then sorted from top to bottom"""
-
+	start = time.time()
 	columns = [[]]
 	bubbles,_ = imutils.contours.sort_contours(bubbles, method="left-to-right")
+	
 	prev_x=0
 	jump = 1000
 	col_index = 0
@@ -159,25 +190,22 @@ def sort_into_columns(bubbles):
 			count[-1] += 1
 			jump = x-prev_x
 		columns[col_index].append(bubble)
-		prev_x = x
-		
+		prev_x = x	
 	for item in count:
+
 		if item == count[0]:
 			choices = count[0]
 		else:
 			return print("Detecting inconsistent choice number")
-
 	for i, column in enumerate(columns):
 		columns[i],_ = imutils.contours.sort_contours(column, method="top-to-bottom")
-		#colour_index = (i%choices) 
-		#cv2.drawContours(temp_image, columns[i], -1, colours[colour_index], 10)
-
+	end = time.time()
+	print("sort",end - start)
 	return columns, choices
 
-	
 def find_questions(columns,choices):
 	"""Goes through the columns to buid sets of contours based on use define number of choices"""
-
+	start = time.time()
 	questions=[]
 	c=0
 	while c < len(columns): 
@@ -185,27 +213,44 @@ def find_questions(columns,choices):
 			i=0
 			question=[]
 			while i<choices:
+				if len(columns[c])>len(columns[c+i]):
+
+					i+=1
+					break
 				question.append(columns[c+i][r])
 				i+=1
 			questions.append(question)
 		c+=choices
-
+	end = time.time()
+	print("questions", end - start)
 	return questions
 
 def find_answers(questions,temp_image):
+	global bub_h, bub_w	
 
+	start = time.time()
 	answers = []
+	gray = cv2.cvtColor(temp_image, cv2.COLOR_BGR2GRAY)
+	gray = cv2.GaussianBlur(gray,(5,5),4)
+	thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV| cv2.THRESH_OTSU)[1]
+	area = cv2.contourArea(inner)
+	limit = 5*math.sqrt(area)
 	for q,question in enumerate(questions):
 		answer = []
 		for bubble in question:
-			fill = check_fill(bubble,temp_image)
-			if fill <700:
+			fill_con = inner + contour_center(bubble)
+			fill = check_fill(fill_con,temp_image,thresh)
+			
+			if fill < limit:
 				fill = 0
+				if 1.3*fill > limit:
+					print(fill)
 			else:
 				temp_image = cv2.drawContours(temp_image, [bubble], -1, colours[0], 7)	
 			answer.append(fill)
 		if ans_key_nums.get(q) != None:
 			temp_image = add_markup(colours[1],question[ans_key_nums.get(q)],ans_key_letters.get(q),temp_image)	
+
 		max_fill = max(answer)
 		if not max_fill:
 			answers.append("Blank")
@@ -225,24 +270,23 @@ def find_answers(questions,temp_image):
 			let_answers[a]
 		else:
 			let_answers[a] = answer
-
+	end = time.time()
+	print("answer", end - start)
 	return let_answers, temp_image, score
 
 def set_markup_size(contour):
-	global bub_hw
-	h=bub_hw[0]
-	w=bub_hw[1]
+	global bub_h, bub_w
 
 	text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, 4, 4)[0]
 	text_shift = [0,0]
-	if text_size [1]>h*1.2:	
+	if text_size [1]>bub_h*1.2:	
 		font_size=3
 		text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, font_size, 4)[0]
-		text_shift[1] = -h//2
+		text_shift[1] = -bub_h//2
 	else:
 		font_size=4
-		text_shift[1] = h//2+text_size[1]//2
-	text_shift[0]=w//2-text_size[0]//2
+		text_shift[1] = bub_h//2+text_size[1]//2
+	text_shift[0]=bub_w//2-text_size[0]//2
 
 	return text_shift, font_size
 
@@ -256,55 +300,56 @@ def add_markup(colour,contour,choice,image):
 
 
 
-def main(scans,ans_nums,ans_letters):	#saw some stuff on git on the proper way to do this.
+def set_parameters(scans,ans_nums,ans_letters):	#saw some stuff on git on the proper way to do this.
+
+	global colours, text_shift, font_size,ans_key_nums,ans_key_letters, bub, bub_h, bub_w, version
 
 	
-	global colours, text_shift, font_size,ans_key_nums,ans_key_letters, bub, bub_hw
-
 	
-
-	ans_key_nums = ans_nums
-	ans_key_letters = ans_letters
+	version = None
+	
 	colours = [(200,0,0),(0,170,0),(0,0,200),(220,200,0),(200,0,200),(0,200,200)] 
 
 	
 	template = numpy.array(scans[0])
-	template= cv2.resize(template,(4800,6835))
-	y,x,h,w = select_area(template,"Select question area",True)
+	template = cv2.resize(template,(4800,6835))
+	y1,x1,y2,x2 = select_area(template,"Select question area",True)
 
-	bub_hw, bub = manual_bubble(template[y:y+h,x:x+w]) 
+	bub_h, bub_w, bub = manual_bubble(template[y1:y2,x1:x2]) 
 
-	
-	#okay now finish the thing
+
+	text_shift, font_size = set_markup_size(bub)
+
 	global processing
 	processing = True
 	progress_thread = threading.Thread(target= progress_bar)
 	progress_thread.start()
-	text_shift, font_size = set_markup_size(bub)
 
+	#parameters(y1,x1,y2,x2,version,bub_h,bub_w,bub,optional=choices,text_shift,font_size) read about keyword **kwargs
+	ans_key_nums = ans_nums
+	ans_key_letters = ans_letters
 
-
-	
 	marked = []
 	
 	for scan in scans:
-
+		start = time.time()
 		image = numpy.array(scan)
 		image = cv2.resize(image,(4800,6835))
-
-		bubbles = find_bubbles(bub_hw,bub,image[y:y+h,x:x+w])
-		columns,choices = sort_into_columns(bubbles)	#if jump//jump==1 count, if all counts agree, set as choices. otherwise prompt to ask?
+		q_area = image[y1:y2,x1:x2]
+		bubbles = find_bubbles(bub_h, bub_w, bub, q_area)
+		columns,choices = sort_into_columns(bubbles)
 		questions = find_questions(columns,choices)
-		let_ans, marked_img, score = find_answers(questions,image[y:y+h,x:x+w])
+		let_ans, q_area, score = find_answers(questions,q_area)
 
-		image[y:y+h,x:x+w]=marked_img
+		image[y1:y2,x1:x2]=q_area
 
 		if ans_key_letters:
-			image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA,False)
-			image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x,y+h+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA,False)
+			image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x2,y2+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA,False)
+			image= cv2.putText(image,f"Score = {score} / {len(ans_key_letters)}",(x2,y2+50),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA,False)
 		image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
 		marked.append([image,score,let_ans])
-
+		end = time.time()
+		print("Loop", end - start)
 	processing = False
 
 	return marked
