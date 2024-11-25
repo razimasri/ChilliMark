@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
         "imutils"
-    ]
+    ],
+    "wolf.disableHotModeWarning": true
 }

@@ -11,12 +11,8 @@ import PIL.ImageTk
 import PIL
 import math
 import pymupdf
-import numpy
 import test_grader
-import csv
 import threading
-import time
-import cv2
 from ctypes import windll
 
 def progress_bar(condition):
@@ -46,7 +42,6 @@ def thumb_grid(doc):
     return thumb_size ,positions
 
 def open_file(filename):
-    global scans
 
     if not filename:
         return
@@ -57,16 +52,12 @@ def open_file(filename):
 
     doc = pymupdf.open(filename)
     thumb_size, positions = thumb_grid(doc)
-
-    scans = []
+    
     for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=600, colorspace="RGB") #reduce colour space
-        image = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
-        img = PIL.Image.frombytes("RGB", [pix.width, pix.height], pix.samples)  
+        pix = page.get_pixmap(dpi=72, colorspace="RGB") #reduce colour space
+        img = PIL.Image.frombuffer("RGB", [pix.width, pix.height], pix.samples)  
         
-        scans.append(image)
-        
-        thumb = img.thumbnail(thumb_size)
+        img.thumbnail(thumb_size)
         thumb = PIL.ImageTk.PhotoImage(img)
         panel = tkinter.Label (canvas)
         panel.grid(row=positions[i][0], column=positions[i][1])
@@ -78,15 +69,13 @@ def choose_file():
     global filename, scans
 
     filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+    open_file(filename)
 
-    open_thread = threading.Thread(target=open_file, args=[filename])
-    open_thread.daemon=True
-    progress_thread = threading.Thread(target=progress_bar, args=[open_thread])
-    progress_thread.start()
-    open_thread.start()
+
+
 
 def mark_exam():
-    global filename, scans, stu_names
+    global filename, stu_names
 
     ans_key_input=ans_key_box.get(1.0, "end-1c")
     stu_names_input=stu_names_box.get(1.0, "end-1c")
@@ -115,99 +104,10 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
 
-    basename = os.path.basename(filename)
-    basename = basename.replace(".pdf","")
-    path_to_save = filename.replace(".pdf","")
 
-    inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2 = test_grader.set_parameters(scans)
-    
-    process_thread = threading.Thread(target=process, args=(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2,path_to_save,ans_key_input))
-    progress_thread = threading.Thread(target=progress_bar, args=[process_thread])
-    progress_thread.start()
-    process_thread.start()
-    
-def process(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2,path_to_save,ans_key_input):
-    start = time.time()
-    marked_work = test_grader.process(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2)
-    
-    global marked_pdf
-    if not(os.path.exists(path_to_save) and os.path.isdir(path_to_save)):
-        os.mkdir(path_to_save)
-                
-    make_output(marked_work,path_to_save,ans_key_input,stu_names)
-    end = time.time()
+    test_grader.main(filename,ans_key_nums,ans_key_letter,stu_names)
 
-    print("time", end-start)
 
-def make_output(marked_work,path_to_save,ans_key_input,stu_names):
-
-    file = open(f"{path_to_save}/answers.csv", 'w' ,newline='')
-    writer = csv.writer(file, dialect='excel', )
-    writer.writerow(["Student Name"]+[f"Out of {len(ans_key_input)}"]+list(ans_key_input))
-    marked_pdf = pymupdf.open()
-    stats_raw = marked_work[0][2]
-    if not(os.path.exists(f"{path_to_save}/single pages") and os.path.isdir(f"{path_to_save}/single pages")):
-        os.mkdir(f"{path_to_save}/single pages")
-    
-    for i, mark in enumerate(marked_work):
-        if stu_names:
-            writer.writerow([stu_names[i]]+[mark[1]]+mark[2])
-            string = stu_names[i].replace(",", "")
-            mark[0]=cv2.putText(mark[0],string,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(255,255,255),25)
-            mark[0]=cv2.putText(mark[0],string,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(0,0,0),10)
-            jpeg_path =f"{path_to_save}/single pages/{string}.jpg"
-        else:
-            writer.writerow([f"Student {i+1}"]+[mark[1]]+mark[2])
-            jpeg_path= f"{path_to_save}/single pages/Student {i+1}.jpg"
-
-        pil_scan = PIL.Image.fromarray(mark[0][:,:,::-1])
-        #bio = io.BytesIO()
-        #pil_scan.save(bio,"jpeg")
-        #bytes_scan = pymupdf.open('jpg',bio.getvalue()) (save incase web version cannot write)
-        pil_scan.save(jpeg_path)
-        bytes_scan = pymupdf.open(jpeg_path)                #bytes_scan = pymupdf.open('png',mark[0])
-        pdfbytes = bytes_scan.convert_to_pdf()
-        rect = bytes_scan[0].rect                           #bytes_scan.close()
-        
-        pdf_scan = pymupdf.open("pdf", pdfbytes)
-        
-    
-#eventually add logic to add student name. Don't want ot code in dealing with the commas
-        page = marked_pdf._newPage(width=rect.width, height=rect.height)
-        page.show_pdf_page(rect,pdf_scan,0) 
-
-        if i>0:
-            stats_raw = zip(stats_raw,mark[2])
-
-    marked_pdf.save(f"{path_to_save}/answers.pdf")
-    #deal with stats of answers
-    stats = [] 
-    options = sorted(set(ans_key_input)) #currently randomly makes 6 choices. Can automate with sets 
-    csv_stats = [["Correct"]]
-    rates = {"Correct": 0}
-    for option in options:
-        rates.update({option : 0})
-        csv_stats.append([option])       
-    for i, row in enumerate(stats_raw):
-        rate = rates.copy()
-        if i == len(ans_key_input):
-            break
-        for ans in row:
-            if rate.get(ans)!= None:
-                rate[ans]=rate.get(ans) + 1
-            if ans == ans_key_input[i] and ans_key_input:
-                rate["Correct"] = rate.get("Correct") +1
-        stats.append(rate.values())
-
-    for row in stats:
-        for k, r in enumerate(row):
-            csv_stats[k].append(r)
-
-    writer.writerow([""])
-    for x in csv_stats:
-        writer.writerow([""]+x)
-
-    os.startfile(path_to_save)
 
 root = tkinter.Tk()
 windll.shcore.SetProcessDpiAwareness(1)
@@ -280,3 +180,4 @@ file_btn=tkinter.Button(btn_frame, text="Select Exam", height = 1, width = 20, b
 file_btn.pack(side="bottom",pady=(0,10),fill="x")
 
 root.mainloop()
+
