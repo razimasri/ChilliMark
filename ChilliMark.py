@@ -11,19 +11,14 @@ import PIL.ImageTk
 import math
 import pymupdf
 import numpy
-import io
 import test_grader
 import csv
 import threading
-import cv2
 import time
+import cv2
 from ctypes import windll
 
-
-
 def progress_bar(condition):
-
-
     bar = tkinter.ttk.Progressbar(btn_frame, orient = tkinter.HORIZONTAL, length = 280, mode = 'indeterminate')
     bar.pack(side='top', pady = (0,10), fill="x")
     wait = threading.Event()
@@ -32,7 +27,6 @@ def progress_bar(condition):
         wait.wait(0.1)
         bar.update()
     bar.destroy()
-
 
 def thumb_grid(doc):
     grid_size = 1
@@ -51,7 +45,6 @@ def thumb_grid(doc):
     return thumb_size ,positions
 
 def open_file(filename):
-
     global scans
 
     if not filename:
@@ -80,7 +73,6 @@ def open_file(filename):
         panel.image = thumb
     return
 
-        
 def choose_file():
     global filename, scans
 
@@ -92,8 +84,6 @@ def choose_file():
     progress_thread.start()
     open_thread.start()
 
-
-
 def mark_exam():
     global filename, scans, stu_names
 
@@ -104,8 +94,7 @@ def mark_exam():
     
     ans_key_input = "".join(x for x in ans_key_input if x.isalpha())
     ans_key_input = ans_key_input.upper()
-    for i, ans in enumerate(ans_key_input): #should make the ans_key in number rather than letters to prevent repeated conversion
-        
+    for i, ans in enumerate(ans_key_input): #should make the ans_key in number rather than letters to prevent repeated conversion    
         ans_key_nums[i]=ord(ans)-65
         ans_key_letter[i]=ans
     
@@ -117,7 +106,7 @@ def mark_exam():
             stu_names.pop(i)
         else:
             stu_names[i]=name.rstrip(", ")
-    print(stu_names)
+    #print(stu_names)
     
     if filename == None:
         tkinter.messagebox.showinfo(title="No file", message= "Please select a file")
@@ -126,20 +115,16 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
 
-
-
     basename= os.path.basename(filename)
     basename= basename.replace(".pdf","")
     path_to_save = filename.replace(".pdf","")
 
     inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2 = test_grader.set_parameters(scans)
     
-    
     process_thread = threading.Thread(target=process, args=(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2,path_to_save,ans_key_input))
     progress_thread = threading.Thread(target=progress_bar, args=[process_thread])
     progress_thread.start()
     process_thread.start()
-    
     
 def process(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2,path_to_save,ans_key_input):
     start = time.time()
@@ -149,16 +134,12 @@ def process(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift
     if not(os.path.exists(path_to_save) and os.path.isdir(path_to_save)):
         os.mkdir(path_to_save)
                 
-    make_output(marked_work,path_to_save,ans_key_input)
+    make_output(marked_work,path_to_save,ans_key_input,stu_names)
     end = time.time()
 
     print("time", end-start)
 
-    
-        
-
-def make_output(marked_work,path_to_save,ans_key_input):
-    global stu_names
+def make_output(marked_work,path_to_save,ans_key_input,stu_names):
 
 
     file = open(f"{path_to_save}/answers.csv", 'w' ,newline='')
@@ -166,26 +147,35 @@ def make_output(marked_work,path_to_save,ans_key_input):
     writer.writerow(["Student Name"]+[f"Out of {len(ans_key_input)}"]+list(ans_key_input))
     marked_pdf = pymupdf.open()
     stats_raw = marked_work[0][2]
+    if not(os.path.exists(f"{path_to_save}/single pages") and os.path.isdir(f"{path_to_save}/single pages")):
+        os.mkdir(f"{path_to_save}/single pages")
     
     for i, mark in enumerate(marked_work):
         if stu_names:
             writer.writerow([stu_names[i]]+[mark[1]]+mark[2])
-            mark[0]=cv2.putText(mark[0],stu_names[i],(300,500),cv2.FONT_HERSHEY_DUPLEX,6,(255,255,255),15)
-            mark[0]=cv2.putText(mark[0],stu_names[i],(300,500),cv2.FONT_HERSHEY_DUPLEX,6,(0,0,0),10)
+            string = stu_names[i].replace(",", "")
+            mark[0]=cv2.putText(mark[0],string,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(255,255,255),25)
+            mark[0]=cv2.putText(mark[0],string,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(0,0,0),10)
+            jpeg_path =f"{path_to_save}/single pages/{string}.jpg"
         else:
             writer.writerow([f"Student {i+1}"]+[mark[1]]+mark[2])
+            jpeg_path= f"{path_to_save}/single pages/Student {i+1}.jpg"
 
-        
         pil_scan = PIL.Image.fromarray(mark[0][:,:,::-1])
-        bio = io.BytesIO()
-        pil_scan.save(bio,"jpeg")
-        bytes_scan = pymupdf.open('jpg',bio.getvalue())
+        #bio = io.BytesIO()
+        #pil_scan.save(bio,"jpeg")
+        #bytes_scan = pymupdf.open('jpg',bio.getvalue()) (save incase web version cannot write)
+        pil_scan.save(jpeg_path)
+        bytes_scan = pymupdf.open(jpeg_path)                #bytes_scan = pymupdf.open('png',mark[0])
         pdfbytes = bytes_scan.convert_to_pdf()
-        rect = bytes_scan[0].rect
-        bytes_scan.close()
+        rect = bytes_scan[0].rect                           #bytes_scan.close()
+        
         pdf_scan = pymupdf.open("pdf", pdfbytes)
+        
+    
+#eventually add logic to add student name. Don't want ot code in dealing with the commas
         page = marked_pdf._newPage(width=rect.width, height=rect.height)
-        page.show_pdf_page(rect,pdf_scan,0)  
+        page.show_pdf_page(rect,pdf_scan,0) 
 
         if i>0:
             stats_raw = zip(stats_raw,mark[2])
@@ -218,24 +208,12 @@ def make_output(marked_work,path_to_save,ans_key_input):
     for x in csv_stats:
         writer.writerow([""]+x)
 
-
     os.startfile(path_to_save)
-    
-
-
-
-
-
-
-
-
-
-
 
 root = tkinter.Tk()
 windll.shcore.SetProcessDpiAwareness(1)
 icon = PIL.ImageTk.PhotoImage(file="icons\Icon128.png")
-version = ["v0.1","Capsaicin"]
+version = ["v0.6","Capsaicin"]
 #version = ["v1.0","Adjuma"]
 
 root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="icons\Icon16.ico"))
@@ -256,7 +234,7 @@ stu_names=None
 scans=[]
 output =[]
 
-root.geometry("1005x750")
+root.geometry("920x750")
 root.resizable(False, False)
 default_font = tkinter.font.nametofont("TkDefaultFont")
 small_font=default_font.copy()
@@ -272,41 +250,34 @@ canvas_frame.columnconfigure(0, weight=1)
 canvas_frame.rowconfigure(1, weight=1)
 canvas_frame.grid_propagate(False)
 
-
 btn_frame = tkinter.Frame(root, bg=palette.get("bg"),height=725,width=523)
 btn_frame.grid(padx=(0,10), pady="10",column=1,row=0, sticky="nsew")
 
 mark_frame = tkinter.Frame(btn_frame, bg=palette.get("bg"))
 mark_frame.pack(side="bottom", fill="x")
 mark_btn=tkinter.Button(mark_frame, text="Mark Exams", height = 4, width = 20,borderwidth=3, command=mark_exam)
-mark_btn.pack(padx=(0,10),pady=(10,0), side='left', fill="both", expand='yes')
+mark_btn.pack(padx=(0,5),pady=(10,0), side='left', fill="both", expand='yes')
 tkinter.Label(mark_frame, bg=palette.get("bg"), image=icon).pack(side='top')
 tkinter.Label(mark_frame, text=version, bg = palette.get("bg")).pack(side='bottom')
-
 
 entry_frame = tkinter.Frame(btn_frame,bg=palette.get("frame"), height= 500)
 entry_frame.pack(side = "bottom", fill="both", expand="yes")
 
-
 entry_frame_ans= tkinter.Frame(entry_frame,bg=palette.get("frame"))
-entry_frame_ans.pack(side="left", pady="10",fill="both", expand="yes")
+entry_frame_ans.pack(side="right", pady="10",fill="both", expand="yes")
 entry_frame_stu= tkinter.Frame(entry_frame,bg=palette.get("frame"))
-entry_frame_stu.pack(side="right", pady="10",fill="both", expand="yes")
+entry_frame_stu.pack(side="left", pady=10,padx=(10,0), fill="both", expand="yes")
 
-tkinter.Label(entry_frame_ans,text="Answer Key",height = 1,anchor="w",bg=palette.get("frame"),fg=palette.get("lighttext")).pack(sid="top",padx="10", pady="10")
-#tkinter.Label(entry_frame_ans,bg=palette.get("frame"),text="On separate lines or with commas\nExample: With commas\n    A, A, B, C, ... \n Or: On separate lines\n    A\n    A\n    B\n    ...",anchor="w", font=small_font,fg=palette.get("lighttext"),justify="left").pack(side="bottom", padx="10", pady="10")
-ans_key_box=tkinter.Text(entry_frame_ans,width=30,height=2, font=small_font, bg=palette.get("whitespace"))
+tkinter.Label(entry_frame_ans,text="Answer Key",width=9,height = 1,anchor="w",bg=palette.get("frame"),fg=palette.get("lighttext")).pack(sid="top", pady="10")
+ans_key_box=tkinter.Text(entry_frame_ans,width=10,height=2, bg=palette.get("whitespace"))
 ans_key_box.pack(padx = "10",fill="both",expand="yes")
-
 
 tkinter.Label(entry_frame_stu, text="Student Names", height = 1, anchor="w",bg=palette.get("frame"),fg=palette.get("lighttext")).pack(side = "top", padx="10", pady="10")
 tkinter.Label(entry_frame_stu,wraplength=190, bg=palette.get("frame"),text="Organize the names in the same order as the scans\nExample: \n    Tanner Moore \n    Emily Hunt\n    Foster Holmes\n    Bailey Alexander\n    ...",anchor="w", font=small_font,fg=palette.get("lighttext"),justify="left").pack(side="bottom", pady="10", anchor=tkinter.NW)
 stu_names_box=tkinter.Text(entry_frame_stu,width=30,height=2,font=small_font, bg=palette.get("whitespace"))
-stu_names_box.pack(side = "top", padx=(0,10),fill="both",expand="yes")
+stu_names_box.pack(side = "top",fill="both",expand="yes")
 
 file_btn=tkinter.Button(btn_frame, text="Select Exam", height = 1, width = 20, borderwidth=3, command=choose_file)
 file_btn.pack(side="bottom",pady=(0,10),fill="x")
-
-
 
 root.mainloop()
