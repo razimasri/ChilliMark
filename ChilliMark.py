@@ -8,6 +8,7 @@ import tkinter.ttk
 import os
 import PIL.Image
 import PIL.ImageTk
+import PIL
 import math
 import pymupdf
 import numpy
@@ -106,7 +107,6 @@ def mark_exam():
             stu_names.pop(i)
         else:
             stu_names[i]=name.rstrip(", ")
-    #print(stu_names)
     
     if filename == None:
         tkinter.messagebox.showinfo(title="No file", message= "Please select a file")
@@ -115,8 +115,8 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
 
-    basename= os.path.basename(filename)
-    basename= basename.replace(".pdf","")
+    basename = os.path.basename(filename)
+    basename = basename.replace(".pdf","")
     path_to_save = filename.replace(".pdf","")
 
     inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2 = test_grader.set_parameters(scans)
@@ -140,7 +140,6 @@ def process(scans,ans_key_nums,ans_key_letter,inner,outer,bub_h,bub_w,text_shift
     print("time", end-start)
 
 def make_output(marked_work,path_to_save,ans_key_input,stu_names):
-
 
     file = open(f"{path_to_save}/answers.csv", 'w' ,newline='')
     writer = csv.writer(file, dialect='excel', )

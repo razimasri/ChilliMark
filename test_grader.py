@@ -72,29 +72,37 @@ def find_bubbles(q_area,outer,bub_h, bub_w):
 	bubbles = []
 	thresh = get_thresh(q_area)
 	cnts,hier = cv2.findContours(thresh,cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
-	version = None
+
+	sorted_cnts = []
+	for i, c in enumerate(cnts):
+		if hier[0][i][3]==-1:
+			sorted_cnts.append(c)
+	sorted_cnts = sorted(sorted_cnts, key=cv2.contourArea, reverse=True)
+ 
 	limit = 0.8*bub_h*bub_w
 	min_w= bub_w*0.8
 	min_h = bub_h*0.8
 	max_w = bub_w*2
 	max_h = bub_h*2
+	version = None
 	if bub_w>bub_h*2:
 		version = "ig"
-	for i,c in enumerate(cnts):
-		if hier[0][i][3]==-1 and cv2.contourArea(c)>limit:
+	for i,c in enumerate(sorted_cnts):
+
+		if cv2.contourArea(c)>limit:#   and 
 			x, y, w, h = cv2.boundingRect(c)
 			if min_w<= w <= max_w and min_h <= h <= max_h: 
 				bubbles.append(outer + contour_center(c))
-				
 				continue
 			if version == "ig":
 				continue
-			
-			messy_mask(c,x,y,w,h,q_area,bub_h,bub_w,outer,bubbles)		
+			messy_mask(c,x,y,w,h,q_area,bub_h,bub_w,outer,bubbles)
+		elif cv2.contourArea(c)<limit:	
+
+			break
 	end = time.time()
 	print("bubbles", end - start)
 
-	
 
 	return bubbles
 
@@ -179,16 +187,14 @@ def find_answers(questions,temp_image,ans_key_nums,ans_key_letter,inner,text_shi
 	answers = []
 	gray = cv2.cvtColor(temp_image, cv2.COLOR_BGR2GRAY)
 	gray = cv2.GaussianBlur(gray,(5,5),4)
-	thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV| cv2.THRESH_OTSU)[1]
+	thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV| cv2.THRESH_OTSU)[1] 
 	area = cv2.contourArea(inner)
 	limit = 6*math.sqrt(area)
 	for q,question in enumerate(questions):
 
 		answer = []
-		b=0
+		
 		for bubble in question:
-			
-			
 			fill_con = inner + contour_center(bubble)
 			x,y,w,h= cv2.boundingRect(fill_con)
 			temp = thresh[y:y+h,x:x+w]
@@ -201,15 +207,17 @@ def find_answers(questions,temp_image,ans_key_nums,ans_key_letter,inner,text_shi
 			else:
 				temp_image = cv2.drawContours(temp_image, [bubble], -1, (200,0,0), 7)
 			answer.append(fill)
-			b+=1
+			
 		if ans_key_nums.get(q) != None:
 			temp_image = add_markup((0,170,0),question[ans_key_nums.get(q)],ans_key_letter.get(q),temp_image,text_shift,font_size,)	
+
 		max_fill = max(answer)
 		if not max_fill:
 			answers.append("Blank")
 		elif answer.count(0) < 3:
 			answers.append("Unclear")
 		else:
+    
 			answers.append(answer.index(max(answer)))
 	
 	let_answers=answers[:]
