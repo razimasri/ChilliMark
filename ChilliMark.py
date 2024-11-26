@@ -41,7 +41,6 @@ def thumb_grid(doc):
     return thumb_size ,positions
 
 def open_file(filename):
-
     if not filename:
         return
     
@@ -72,7 +71,6 @@ def choose_file():
 
 
 def mark_exam():
-
     ans_key_input=ans_key_box.get(1.0, "end-1c")
     stu_names_input=stu_names_box.get(1.0, "end-1c")
     
@@ -83,15 +81,12 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
 
-
     test_grader.main(filename,ans_key_input,stu_names)
-
-
 
 root = tkinter.Tk()
 windll.shcore.SetProcessDpiAwareness(1)
 icon = PIL.ImageTk.PhotoImage(file="icons\Icon128.png")
-version = ["v0.6","Capsaicin"]
+version = ["v0.7","Capsaicin"]
 #version = ["v1.0","Adjuma"]
 
 root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="icons\Icon16.ico"))
