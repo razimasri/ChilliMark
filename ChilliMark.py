@@ -16,9 +16,12 @@ from ctypes import windll
 
 def progress_bar(condition):
     bar = tkinter.ttk.Progressbar(btn_frame, orient = tkinter.HORIZONTAL, length = 280, mode = 'indeterminate')
-    bar.pack(side='top', pady = (0,10), fill="x")
     wait = threading.Event()
-    while condition.is_alive():
+    if condition.is_alive() or condition==True:
+        bar.pack(side='top', pady = (0,10), fill="x")
+    else: 
+        wait(0.1)
+    while condition.is_alive() or condition==True:
         bar['value']+=10
         wait.wait(0.1)
         bar.update()
@@ -26,7 +29,7 @@ def progress_bar(condition):
 
 def thumb_grid(doc):
     grid_size = 1
-
+    
     grid_size = math.isqrt(len(doc))+1*(math.sqrt(len(doc))!=math.isqrt(len(doc)))
     thumb_size = (500//grid_size-grid_size//2,705//grid_size-grid_size)
     positions = []
@@ -52,7 +55,7 @@ def open_file(filename):
     thumb_size, positions = thumb_grid(doc)
     
     for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=72, colorspace="RGB") #reduce colour space
+        pix = page.get_pixmap(dpi=50, colorspace="RGB")
         img = PIL.Image.frombuffer("RGB", [pix.width, pix.height], pix.samples)  
         
         img.thumbnail(thumb_size)
@@ -64,10 +67,16 @@ def open_file(filename):
     return
 
 def choose_file():
-    global filename, scans
-
+    global filename, first_page
+    
     filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
-    open_file(filename)
+
+    open_thread = threading.Thread(target=open_file, args=[filename])
+    open_thread.daemon=True
+    progress_thread = threading.Thread(target=progress_bar, args=[open_thread])
+    progress_thread.start()
+    open_thread.start()
+    first_page = test_grader.first_page(filename) #sneaky workaround to avoid loading time of first page.
 
 
 def mark_exam():
@@ -80,8 +89,16 @@ def mark_exam():
     elif not ans_key_input or not stu_names_input:
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
+    
+    test_grader.main(filename,ans_key_input,stu_names_input,first_page)
 
-    test_grader.main(filename,ans_key_input,stu_names)
+
+
+
+global filename
+
+filename = None
+process = False
 
 root = tkinter.Tk()
 windll.shcore.SetProcessDpiAwareness(1)
@@ -101,11 +118,6 @@ palette = {
     "prog_bar":"#00713e"}
 
 root.configure(bg=palette.get("bg"), borderwidth=2)
-filename=None
-
-stu_names=None
-scans=[]
-output =[]
 
 root.geometry("920x750")
 root.resizable(False, False)
