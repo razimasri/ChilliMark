@@ -5,7 +5,6 @@ import tkinter.filedialog
 import tkinter.font
 import tkinter.messagebox
 import tkinter.ttk
-import os
 import PIL.Image
 import PIL.ImageTk
 import PIL
@@ -72,40 +71,20 @@ def choose_file():
     open_file(filename)
 
 
-
-
 def mark_exam():
-    global filename, stu_names
 
     ans_key_input=ans_key_box.get(1.0, "end-1c")
     stu_names_input=stu_names_box.get(1.0, "end-1c")
-    ans_key_nums={}
-    ans_key_letter={}
-    
-    ans_key_input = "".join(x for x in ans_key_input if x.isalpha())
-    ans_key_input = ans_key_input.upper()
-    for i, ans in enumerate(ans_key_input): #should make the ans_key in number rather than letters to prevent repeated conversion    
-        ans_key_nums[i]=ord(ans)-65
-        ans_key_letter[i]=ans
-    
-    stu_names_input = stu_names_input.title()
-    stu_names = stu_names_input.split("\n")
-    
-    for i, name in enumerate(stu_names.copy()):
-        if not name:
-            stu_names.pop(i)
-        else:
-            stu_names[i]=name.rstrip(", ")
     
     if filename == None:
         tkinter.messagebox.showinfo(title="No file", message= "Please select a file")
         return
-    elif not ans_key_nums or not stu_names:
+    elif not ans_key_input or not stu_names_input:
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
 
 
-    test_grader.main(filename,ans_key_nums,ans_key_letter,stu_names)
+    test_grader.main(filename,ans_key_input,stu_names)
 
 
 

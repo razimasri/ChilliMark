@@ -345,7 +345,33 @@ def make_output(marked_work,filename,ans_key_letter,stu_names):
 
 	os.startfile(path_to_save)
 
-def main(filename,ans_key_nums,ans_key_letter,stu_names):
+def clean_inputs(ans_key_input,stu_names_input):
+	
+	ans_key_nums={}
+	ans_key_letter={}
+	stu_names = None
+
+	if ans_key_input:
+		ans_key_input = "".join(x for x in ans_key_input if x.isalpha())
+		ans_key_input = ans_key_input.upper()
+	for i, ans in enumerate(ans_key_input): #should make the ans_key in number rather than letters to prevent repeated conversion    
+		ans_key_nums[i]=ord(ans)-65
+		ans_key_letter[i]=ans
+	if stu_names_input:
+		stu_names_input = stu_names_input.title()
+		stu_names = stu_names_input.split("\n")
+
+		for i, name in enumerate(stu_names.copy()):
+			if not name:
+				stu_names.pop(i)
+			else:
+				stu_names[i]=name.rstrip(", ")
+	return stu_names, ans_key_letter, ans_key_nums
+
+def main(filename,ans_key_input=None,stu_names_input=None):
+
+	stu_names, ans_key_letter, ans_key_nums = clean_inputs(ans_key_input,stu_names_input)
+
 
 	scans = []
 	doc = pymupdf.open(filename)
