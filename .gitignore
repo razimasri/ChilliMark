@@ -1,5 +1,4 @@
-.venv/Lib/site-packages/cv2/load_config_py3.py
-
 ChilliMark.build/
 ChilliMark.dist/
-ChilliMark.onefile-build
+ChilliMark.onefile-build/
+venv/

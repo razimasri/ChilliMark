@@ -10,7 +10,26 @@ import csv
 import os
 import PIL
 import threading
-#import ChilliMark
+
+#classes to create, parameters, Students, question
+
+class Parameters:
+	
+	def __init__(self,x1,y1,y2,x2,image):
+		self.y1	= y1
+		self.x1	= x1
+		self.y2 = y2
+		self.x2 = x2
+		self.outer =[]
+		self.inner =[]
+		self.h =[]
+		self.b = []
+	
+	def __str__(self):
+		return f"Question are {x1,y1,x2,y2}"
+
+
+
 
 
 def main(filename,ans_key_input=None,stu_names_input=None,first_page=None):
@@ -21,7 +40,7 @@ def main(filename,ans_key_input=None,stu_names_input=None,first_page=None):
 
 	first_scan = numpy.frombuffer(buffer=first_page.samples, dtype=numpy.uint8).reshape((first_page.height, first_page.width, -1))	
 
-	inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2 = set_parameters(first_scan)
+	text_shift,font_size = set_parameters(first_scan)
 
 	stu_names, ans_key_letter, ans_key_nums = clean_inputs(ans_key_input,stu_names_input)
 
@@ -40,19 +59,19 @@ def main(filename,ans_key_input=None,stu_names_input=None,first_page=None):
 
 	marked = []
 	for scan in scans: #figure out multithreading or multiprocessing to deal with errors
-		process(scan,inner,outer,bub_h,bub_w,size,icon,ans_key_nums,ans_key_letter,text_shift,font_size,y1,x1,y2,x2)#see what classs can reduce this
+		process(scan,bub.inner,bub.outer,bub.h,bub.w,size,icon,ans_key_nums,ans_key_letter,text_shift,font_size,y1,x1,y2,x2)#see what classs can reduce this
 
 	make_output(marked,filename,ans_key_letter,stu_names)
 
-def process(scan,inner,outer,bub_h,bub_w,size,icon,ans_key_nums,ans_key_letter,text_shift,font_size,y1,x1,y2,x2):
+def process(scan,bub.inner,bub.outer,bub.h,bub.w,size,icon,ans_key_nums,ans_key_letter,text_shift,font_size,y1,x1,y2,x2):
 	start = time.time()
 	image = numpy.array(scan)
 	image = cv2.resize(image,(4800,6835))
 	q_area = image[y1:y2,x1:x2]
-	bubbles = find_bubbles(q_area,outer,bub_h, bub_w)
+	bubbles = find_bubbles(q_area,bub.outer,bub.h, bub.w)
 	columns,choices = sort_into_columns(bubbles)
 	questions = find_questions(columns,choices)
-	let_ans, q_area, score = find_answers(questions,q_area,ans_key_nums,ans_key_letter,inner,text_shift,font_size)
+	let_ans, q_area, score = find_answers(questions,q_area,ans_key_nums,ans_key_letter,bub.inner,text_shift,font_size)
 
 	image[y1:y2,x1:x2] = q_area
 
@@ -98,19 +117,18 @@ def manual_bubble(image):
 	
 	thresh = get_thresh(image[y1:y2,x1:x2],blur=True)
 	outer, _ = cv2.findContours(thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-	outer=outer[0]
-	outer = cv2.approxPolyDP(outer, 0.01*cv2.arcLength(outer, True), True)		
+	outer=bub.outer[0]
+	outer = cv2.approxPolyDP(bub.outer, 0.01*cv2.arcLength(bub.outer, True), True)		
 
-	x, y, w, h = cv2.boundingRect(outer)
+	x, y, w, h = cv2.boundingRect(bub.outer)
 	img = cv2.bitwise_not(thresh)
 	img = cv2.rectangle(img,(x,y),(x+w,y+h),0,16)
 	img = img[y:y+h,x:x+w]
 	inner, _ = cv2.findContours(img,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)	
-	bub_h, bub_w = h, w
-	inner = inner[0]
-	outer = outer-contour_center(outer)
-	inner = inner-contour_center(inner)
-	return bub_h, bub_w, outer, inner
+	bub.bub.h, bub.bub.w = h, w
+	bub.inner = inner[0]
+	bub.bub.outer = outer-contour_center(outer)
+	bub.bub.inner = inner-contour_center(inner)
 
 def get_thresh(image,blur=True):
 	if blur:
@@ -124,7 +142,7 @@ def	contour_center(contour):
 	cy = int(M['m01']/M['m00'])
 	return [cx,cy]
 
-def find_bubbles(q_area,outer,bub_h, bub_w):
+def find_bubbles(q_area,bub):
 	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
 	start = time.time()
@@ -137,25 +155,25 @@ def find_bubbles(q_area,outer,bub_h, bub_w):
 		if hier[0][i][3]==-1:
 			sorted_cnts.append(c)
 	sorted_cnts = sorted(sorted_cnts, key=cv2.contourArea, reverse=True)
- 
-	limit = 0.8*bub_h*bub_w
-	min_w= bub_w*0.8
-	min_h = bub_h*0.8
-	max_w = bub_w*2
-	max_h = bub_h*2
+
+	limit = 0.8*bub.h*bub.w
+	min_w= bub.w*0.8
+	min_h = bub.h*0.8
+	max_w = bub.w*2
+	max_h = bub.h*2
 	version = None
-	if bub_w>bub_h*2:
+	if bub.w>bub.h*2:
 		version = "ig"
 	for i,c in enumerate(sorted_cnts):
 
 		if cv2.contourArea(c)>limit:#   and 
 			x, y, w, h = cv2.boundingRect(c)
 			if min_w<= w <= max_w and min_h <= h <= max_h: 
-				bubbles.append(outer + contour_center(c))
+				bubbles.append(bub.outer + contour_center(c))
 				continue
 			if version == "ig":
 				continue
-			messy_mask(c,x,y,w,h,q_area,bub_h,bub_w,outer,bubbles)
+			messy_mask(c,x,y,w,h,q_area,bub.h,bub.w,bub.outer,bubbles)
 		elif cv2.contourArea(c)<limit:	
 
 			break
@@ -165,9 +183,9 @@ def find_bubbles(q_area,outer,bub_h, bub_w):
 
 	return bubbles
 
-def messy_mask(c,x,y,w,h,q_area,bub_h,bub_w,outer,bubbles):
-	x_scale = w//bub_w
-	y_scale = h//bub_h
+def messy_mask(c,x,y,w,h,q_area,bub.h,bub.w,bub.outer,bubbles):
+	x_scale = w//bub.w
+	y_scale = h//bub.h
 	mask = numpy.zeros(q_area.shape, dtype="uint8") 
 	mask = cv2.drawContours(mask,[c],-1,(255,255,255),-1)
 	j=1
@@ -182,8 +200,8 @@ def messy_mask(c,x,y,w,h,q_area,bub_h,bub_w,outer,bubbles):
 	messy,_= cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 	for mess in messy: 
 		_, _, w, h = cv2.boundingRect(mess)
-		if bub_w*0.8<= w <= bub_w*1.4 and bub_h*0.8 <= h <= bub_h*1.4:
-			bubbles.append(outer + contour_center(mess))	
+		if bub.w*0.8<= w <= bub.w*1.4 and bub.h*0.8 <= h <= bub.h*1.4:
+			bubbles.append(bub.outer + contour_center(mess))	
 
 def sort_into_columns(bubbles,img=None):
 	"""Sorts them from left to right. 
@@ -240,21 +258,21 @@ def find_questions(columns,choices):
 	print("questions", end - start)
 	return questions
 
-def find_answers(questions,temp_image,ans_key_nums,ans_key_letter,inner,text_shift,font_size,):
+def find_answers(questions,temp_image,ans_key_nums,ans_key_letter,bub.inner,text_shift,font_size,):
 
 	start = time.time()
 	answers = []
 	gray = cv2.cvtColor(temp_image, cv2.COLOR_BGR2GRAY)
 	gray = cv2.GaussianBlur(gray,(5,5),4)
 	thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV| cv2.THRESH_OTSU)[1] 
-	area = cv2.contourArea(inner)
+	area = cv2.contourArea(bub.inner)
 	limit = 6*math.sqrt(area)
 	for q,question in enumerate(questions):
 
 		answer = []
 		
 		for bubble in question:
-			fill_con = inner + contour_center(bubble)
+			fill_con = bub.inner + contour_center(bubble)
 			x,y,w,h= cv2.boundingRect(fill_con)
 			temp = thresh[y:y+h,x:x+w]
 			mask = numpy.zeros(temp.shape, dtype="uint8") 
@@ -294,17 +312,17 @@ def find_answers(questions,temp_image,ans_key_nums,ans_key_letter,inner,text_shi
 	print("answer", end - start)
 	return let_answers, temp_image, score
 
-def set_markup_size(contour,bub_h,bub_w):
+def set_markup_size(contour,bub.h,bub.w):
 	text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, 4, 4)[0]
 	text_shift = [0,0]
-	if text_size [1]>bub_h*1.2:	
+	if text_size [1]>bub.h*1.2:	
 		font_size=3
 		text_size = cv2.getTextSize("A",cv2.FONT_HERSHEY_SIMPLEX, font_size, 4)[0]
-		text_shift[1] = -bub_h//2
+		text_shift[1] = -bub.h//2
 	else:
 		font_size=4
-		text_shift[1] = bub_h//2+text_size[1]//2
-	text_shift[0]=bub_w//2-text_size[0]//2
+		text_shift[1] = bub.h//2+text_size[1]//2
+	text_shift[0]=bub.w//2-text_size[0]//2
 	return text_shift, font_size
 
 def add_markup(colour,contour,choice,image,text_shift,font_size,):
@@ -318,10 +336,11 @@ def add_markup(colour,contour,choice,image,text_shift,font_size,):
 def set_parameters(first_page):	#saw some stuff on git on the proper way to do this.
 	template = numpy.array(first_page)
 	template = cv2.resize(template,(4800,6835))
-	y1,x1,y2,x2 = select_area(template,"Select question area",True)
-	bub_h, bub_w, outer,inner = manual_bubble(template[y1:y2,x1:x2]) 
-	text_shift, font_size = set_markup_size(outer,bub_h,bub_w)
-	return inner,outer,bub_h,bub_w,text_shift,font_size, y1,x1,y2,x2
+	
+	bub = Parameters(select_area(template,"Select question area",True))
+	bub.h, bub.w, bub.outer,bub.inner = manual_bubble(template[y1:y2,x1:x2]) 
+	text_shift, font_size = set_markup_size(bub.outer,bub.h,bub.w)
+	return bub.inner,bub.outer,bub.h,bub.w,text_shift,font_size, y1,x1,y2,x2
 
 def make_output(marked_work,filename,ans_key_letter,stu_names):
 	
