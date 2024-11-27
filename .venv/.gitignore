@@ -1,1 +1,5 @@
-*
+*ChilliMark.build
+*ChilliMark.onefile-build
+*ChilliMark.dist
+*.venv
+*exe
