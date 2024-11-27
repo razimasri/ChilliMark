@@ -2,4 +2,6 @@
 
 ChilliMark.build/
 ChilliMark.dist/
-ChilliMark.onefile-build
+ChilliMark.onefile-build/
+venv/
+vscode/
