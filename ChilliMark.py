@@ -14,14 +14,11 @@ import test_grader
 import threading
 from ctypes import windll
 
-def progress_bar(condition):
+def progress_bar(condition=None):
     bar = tkinter.ttk.Progressbar(btn_frame, orient = tkinter.HORIZONTAL, length = 280, mode = 'indeterminate')
     wait = threading.Event()
-    if condition.is_alive() or condition==True:
-        bar.pack(side='top', pady = (0,10), fill="x")
-    else: 
-        wait(0.1)
-    while condition.is_alive() or condition==True:
+    bar.pack(side='top', pady = (0,10), fill="x")
+    while condition.is_alive():
         bar['value']+=10
         wait.wait(0.1)
         bar.update()
@@ -31,7 +28,7 @@ def thumb_grid(doc):
     grid_size = 1
     
     grid_size = math.isqrt(len(doc))+1*(math.sqrt(len(doc))!=math.isqrt(len(doc)))
-    thumb_size = (500//grid_size-grid_size//2,705//grid_size-grid_size)
+    thumb_size = (500//grid_size-1,705/grid_size)
     positions = []
     c=0
     r=0
@@ -44,11 +41,12 @@ def thumb_grid(doc):
     return thumb_size ,positions
 
 def open_file(filename):
+    
     if not filename:
         return
     
     canvas_frame.children.clear()
-    canvas = tkinter.Canvas(canvas_frame, bg=palette.get("frame"), height=725, width=523, bd=0, highlightthickness=0, relief='ridge')
+    canvas = tkinter.Canvas(canvas_frame, bg=palette.get("frame"), height=705, width=5, bd=0, highlightthickness=0, relief='ridge')
     canvas.grid(padx="10", pady="10", column=0,row=0, sticky="nsew")
 
     doc = pymupdf.open(filename)
@@ -64,41 +62,37 @@ def open_file(filename):
         panel.grid(row=positions[i][0], column=positions[i][1])
         panel.config(image=thumb)
         panel.image = thumb
+    
+    global first_page
+    first_page = test_grader.first_page(filename)#sneaky workaround to avoid loading time of first page.
     return
 
 def choose_file():
-    global filename, first_page
-    
+    global filename
     filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
 
     open_thread = threading.Thread(target=open_file, args=[filename])
-    open_thread.daemon=True
+    #open_thread.daemon=True
     progress_thread = threading.Thread(target=progress_bar, args=[open_thread])
     progress_thread.start()
     open_thread.start()
-    first_page = test_grader.first_page(filename) #sneaky workaround to avoid loading time of first page.
-
 
 def mark_exam():
-    ans_key_input=ans_key_box.get(1.0, "end-1c")
-    stu_names_input=stu_names_box.get(1.0, "end-1c")
-    
+    key_input=ans_key_box.get(1.0, "end-1c")
+    names_input=stu_names_box.get(1.0, "end-1c")
+    print(threading.activeCount())
     if filename == None:
         tkinter.messagebox.showinfo(title="No file", message= "Please select a file")
         return
-    elif not ans_key_input or not stu_names_input:
-        if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered the Student Names or Answer Key. \nAre you sure you want to continue?"):
+    elif not key_input or not names_input:
+        if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered either the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
     
-    test_grader.main(filename,ans_key_input,stu_names_input,first_page)
-
-
+    test_grader.main(filename,key_input,names_input,first_page)
 
 
 global filename
-
 filename = None
-process = False
 
 root = tkinter.Tk()
 windll.shcore.SetProcessDpiAwareness(1)
@@ -166,4 +160,5 @@ file_btn=tkinter.Button(btn_frame, text="Select Exam", height = 1, width = 20, b
 file_btn.pack(side="bottom",pady=(0,10),fill="x")
 
 root.mainloop()
+
 
