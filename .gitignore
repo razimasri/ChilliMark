@@ -1,7 +1,8 @@
-.venv/Lib/site-packages/cv2/load_config_py3.py
 
-ChilliMark.build/
-ChilliMark.dist/
-ChilliMark.onefile-build/
-venv/
-vscode/
+gui_desk.build
+gui_desk.dist
+gui_desk.onefile-build
+.venv/
+.vscode
+.env
+
