@@ -91,7 +91,7 @@ def mark_exam():
     
     chillimark.main(filename,key_input,names_input,first_page)
     path_to_save = filename.replace(".pdf","")
-	os.startfile(path_to_save)
+    os.startfile(path_to_save)
 
 
 global filename
@@ -100,7 +100,7 @@ filename = None
 root = tkinter.Tk()
 windll.shcore.SetProcessDpiAwareness(1)
 icon = PIL.ImageTk.PhotoImage(file="icons\Icon128.png")
-version = ["v0.7","Capsaicin"]
+version = ["v0.8","Capsaicin"]
 #version = ["v1.0","Adjuma"]
 
 root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="icons\Icon16.ico"))

@@ -1,6 +1,6 @@
-ChilliMark.build
-ChilliMark.dist
-ChilliMark.onefile-build
-.venv
+gui_desk.build
+gui_desk.dist
+gui_desk.onefile-build
+.venv/
 .vscode
 .env
