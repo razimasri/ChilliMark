@@ -1,6 +1,8 @@
+
 gui_desk.build
 gui_desk.dist
 gui_desk.onefile-build
 .venv/
 .vscode
 .env
+
