@@ -26,10 +26,11 @@ def progress_bar(condition=None):
     bar.destroy()
 
 def thumb_grid(doc):
-    grid_size = 1
-    
+    #grid_size = 1
     grid_size = math.isqrt(len(doc))+1*(math.sqrt(len(doc))!=math.isqrt(len(doc)))
-    thumb_size = (500//grid_size-1,705/grid_size)
+    print(grid_size)
+    thumb_size = (500//grid_size-4,705//grid_size-4)
+    print(thumb_size)
     positions = []
     c=0
     r=0
@@ -54,7 +55,7 @@ def open_file(filename):
     thumb_size, positions = thumb_grid(doc)
     
     for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=50, colorspace="RGB")
+        pix = page.get_pixmap(dpi=72, colorspace="RGB")
         img = PIL.Image.frombuffer("RGB", [pix.width, pix.height], pix.samples)  
         
         img.thumbnail(thumb_size)
@@ -126,7 +127,7 @@ root.option_add("*Font", default_font)
 root.columnconfigure(0, weight=1)
 root.rowconfigure(1, weight=1)
 
-canvas_frame = tkinter.Frame(root,bg=palette.get("frame"), height=725, width=523, bd=0, highlightthickness=0, relief='ridge')
+canvas_frame = tkinter.Frame(root,bg=palette.get("frame"), height=725, width=520, bd=0, highlightthickness=0, relief='ridge')
 canvas_frame.grid(padx="10", pady="10", column=0,row=0)
 canvas_frame.columnconfigure(0, weight=1)
 canvas_frame.rowconfigure(1, weight=1)

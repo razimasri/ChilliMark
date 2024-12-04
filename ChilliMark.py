@@ -102,6 +102,7 @@ def main(filename,key_input=None,names_input=None,first_page=None):
 
 	for student in students: #figure out multithreading or multiprocessing to deal with errors
 		start = time.time()
+		print("PAGE 1")
 		process(student,bub,size,icon,key_nums,key_letter)#see what classs can reduce this
 		end = time.time()
 		print("Loop", end - start)
@@ -143,15 +144,25 @@ def process(student,bub,size,icon,key_nums,key_letter):
 	image = cv2.resize(image,(4800,6835))
 	image,rect= rotation(image)
 
-	if (bub.rect[2]/rect[2])-1>0.02:
-		scale_x = bub.rect[2]/rect[2]
-		print("SCALE",scale_x)
-		scale_y = bub.rect[3]/rect[3]
+	scale_x = bub.rect[2]/rect[2]
+	scale_y = bub.rect[3]/rect[3]
+	print("SCALEX",scale_x)
+	print("SCALEY",scale_y)
+	if scale_x>1.02:
 		diff_x = bub.rect[2]-rect[2]
-		diff_y =bub.rect[3]-rect[3]
+		diff_y = bub.rect[3]-rect[3]
 		image = cv2.resize(image,(int(4800*scale_x),int(6835*scale_y)))
-		image = image[diff_y//2:diff_y+6835,diff_x//2:diff_x+4800]	
+		image = image[diff_y//2:diff_y//2+6835,diff_x//2:diff_x//2+4800]	
+	elif scale_x<0.98:
+		image = cv2.resize(image,(int(4800*scale_x),int(6835*scale_y)))
+		height, width, _ = image.shape
+		diff_x=4800-width
+		diff_y=6835-height
+		image=cv2.copyMakeBorder(image,diff_y//2,diff_y//2,diff_x//2,diff_x//2,cv2.BORDER_CONSTANT, value=(255,255,255))
+	#print(image.shape)
 	q_area = image[bub.y1:bub.y2,bub.x1:bub.x2]
+	#cv2.imshow("",cv2.resize(image,(500,705)))
+	#cv2.waitKey(0)
 	end = time.time()
 
 	print("Scale Time", end - start)
@@ -203,9 +214,9 @@ def select_area(image, instructions="Select Area",blur=False):
 
 def get_thresh(image,blur=True):
 	if blur:
-		image = cv2.medianBlur(image,5)
+		image = cv2.medianBlur(image,7)
 	image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-	return cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 17,4)
+	return cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 29,4)
 
 def	contour_center(contour):
 	M = cv2.moments(contour)
@@ -234,8 +245,8 @@ def find_bubbles(q_area,bub):
 	limit = 0.9*bub.h*bub.w
 	min_w= bub.w*0.9
 	min_h = bub.h*0.9
-	max_w = bub.w*1.1
-	max_h = bub.h*1.1
+	max_w = bub.w*1.2
+	max_h = bub.h*1.2
 	version = None
 	if bub.w>bub.h*2:
 		version = "ig"
@@ -254,8 +265,8 @@ def find_bubbles(q_area,bub):
 
 	end = time.time()
 	print("bubbles", end - start)
-	#hi,wi,_ = q_area.shape 
-	#cv2.drawContours(q_area,bubbles,-1,(255,0,0),3)
+	hi,wi,_ = q_area.shape 
+	#cv2.drawContours(q_area,bubbles,-1,(0,0,255),3)
 	#cv2.imshow("",cv2.resize(q_area,(wi//4,hi//4)))
 	#cv2.waitKey(0)
 	return bubbles
@@ -264,35 +275,43 @@ def messy(c,q_area,bub,bubbles):
 	#very ugly. need to refactor and fix
 	#call whole function messy. divide into two sections called the erosion pass and slicing pass
 	erode_mask = numpy.zeros(q_area.shape, dtype="uint8") 
+	#c = cv2.approxPolyDP(c, 0.01*cv2.arcLength(c, True), True)
 	erode_mask = cv2.drawContours(erode_mask,[c],-1,(255,255,255),-1)
-	kernel = numpy.ones((35, 35), numpy.uint8)
+	#cv2.imshow("",cv2.resize(erode_mask,(700,700)))
+	#cv2.waitKey(0)
+	kernel = numpy.ones((31, 31), numpy.uint8)
 	erode_mask = cv2.erode(erode_mask,kernel=kernel,iterations=1)
 	erode_mask = cv2.cvtColor(erode_mask,cv2.COLOR_RGB2GRAY)
+	#cv2.imshow("",cv2.resize(erode_mask,(700,700)))
+	#cv2.waitKey(0)
 	erode_cnts,_= cv2.findContours(erode_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 	for e_cnt in erode_cnts: 
 		x, y, w, h = cv2.boundingRect(e_cnt)
 		if bub.w*0.5 <= w <= bub.w*1.5 and bub.h*0.5 <= h <= bub.h*1.5:
 			bubbles.append(bub.outer + contour_center(e_cnt))
 			continue
-		else:
-			slice_mask = numpy.zeros(q_area.shape, dtype="uint8") 
-			slice_mask = cv2.drawContours(slice_mask,[e_cnt],-1,(255,255,255),-1)
-			x_scale = w//bub.w+1
-			y_scale = h//bub.h
-			j=1
-			while j<x_scale:
-				cv2.line(slice_mask,(x+j*w//x_scale,y-10),(x+j*w//x_scale,y+h+10),(0,0,0),15)
-				j+=1
-			k=1
-			while k<y_scale:
-				cv2.line(slice_mask,(x-10,y+k*h//y_scale),(x+w+10,y+k*h//y_scale),(0,0,0),15)
-				k+=1
-			slice_mask = cv2.cvtColor(slice_mask,cv2.COLOR_RGB2GRAY)
-			slice_cnts,_= cv2.findContours(slice_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-			for s_cnt in slice_cnts: 
-				_, _, sw, sh = cv2.boundingRect(s_cnt)
-				if bub.w*0.5 <= sw <= bub.w*1.4 and bub.h*0.5 <= sh <= bub.h*1.4:
-					bubbles.append(bub.outer + contour_center(s_cnt))
+		slice_mask = numpy.zeros(q_area.shape, dtype="uint8") 
+		slice_mask = cv2.drawContours(slice_mask,[e_cnt],-1,(255,255,255),-1)
+		x_scale = w//bub.w+1
+		y_scale = h//bub.h
+		j=1
+		while j<x_scale:
+			cv2.line(slice_mask,(x+j*w//x_scale,y-10),(x+j*w//x_scale,y+h+10),(0,0,0),15)
+			j+=1
+		k=1
+		while k<y_scale:
+			cv2.line(slice_mask,(x-10,y+k*h//y_scale),(x+w+10,y+k*h//y_scale),(0,0,0),15)
+			k+=1
+		slice_mask = cv2.cvtColor(slice_mask,cv2.COLOR_RGB2GRAY)
+		slice_cnts,_= cv2.findContours(slice_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+		#cv2.imshow("",cv2.resize(slice_mask,(700,700)))
+		#cv2.waitKey(0)
+		for s_cnt in slice_cnts: 
+
+			#bubbles.append(bub.outer + contour_center(s_cnt))
+			_, _, sw, sh = cv2.boundingRect(s_cnt)
+			if bub.w*0.5 <= sw <= bub.w*1.4 and bub.h*0.5 <= sh <= bub.h*1.4:
+				bubbles.append(bub.outer + contour_center(s_cnt))
 
 def sort_into_columns(bubbles,img=None):
 	"""Sorts them from left to right. 
@@ -308,11 +327,11 @@ def sort_into_columns(bubbles,img=None):
 	count=[1]
 	for i, bubble in enumerate(bubbles):	 
 		x,_,w,_= cv2.boundingRect(bubble)
+		if abs(prev_x-x)/jump > 1.1: #hmm does not need to be nested
+			count.append(0) 
 		if abs(x-prev_x) > w//2 and i>0:
 			col_index +=1
 			columns.append([])
-			if abs(prev_x-x)/jump > 1.1:
-				count.append(0)  
 			count[-1] += 1
 			jump = x-prev_x
 		columns[col_index].append(bubble)
@@ -363,14 +382,14 @@ def find_answers(questions,temp_image,key_nums,key_letter,bub):
 	#cv2.imshow("",thresh)
 	#cv2.waitKey(0)
 	area = cv2.contourArea(bub.inner)
-	limit = 6*math.sqrt(area)
+	limit = 5.5*math.sqrt(area)
 	for q,question in enumerate(questions):
 		answer = []	
 		for bubble in question:
 			fill_con = bub.inner + contour_center(bubble)
 			x,y,w,h= cv2.boundingRect(fill_con)
 			temp = thresh[y:y+h,x:x+w]
-#			cv2.putText(temp_image,f"{q+1}",(x+20,y+20),cv2.FONT_HERSHEY_COMPLEX_SMALL,3,(0,255,0),4)
+			#cv2.putText(temp_image,f"{q+1}",(x+20,y+20),cv2.FONT_HERSHEY_COMPLEX_SMALL,3,(0,255,0),4)
 			mask = numpy.zeros(temp.shape, dtype="uint8") 
 			mask = cv2.bitwise_and(temp, temp, mask)
 			#cv2.imshow("",mask)
