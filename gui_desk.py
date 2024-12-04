@@ -81,7 +81,7 @@ def choose_file():
 def mark_exam():
     key_input=ans_key_box.get(1.0, "end-1c")
     names_input=stu_names_box.get(1.0, "end-1c")
-    print(threading.activeCount())
+    #print(threading.activeCount())
     if filename == None:
         tkinter.messagebox.showinfo(title="No file", message= "Please select a file")
         return
