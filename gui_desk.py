@@ -28,9 +28,9 @@ def progress_bar(condition=None):
 def thumb_grid(doc):
     #grid_size = 1
     grid_size = math.isqrt(len(doc))+1*(math.sqrt(len(doc))!=math.isqrt(len(doc)))
-    print(grid_size)
+    #print(grid_size)
     thumb_size = (500//grid_size-4,705//grid_size-4)
-    print(thumb_size)
+    #print(thumb_size)
     positions = []
     c=0
     r=0
@@ -101,7 +101,7 @@ filename = None
 root = tkinter.Tk()
 windll.shcore.SetProcessDpiAwareness(1)
 icon = PIL.ImageTk.PhotoImage(file="icons\Icon128.png")
-version = ["v0.8","Capsaicin"]
+version = ["v0.9","Capsaicin"]
 #version = ["v1.0","Adjuma"]
 
 root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="icons\Icon16.ico"))

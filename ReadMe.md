@@ -1,7 +1,7 @@
 
 
 To Do:
-
+C.H.I.L.L.I – Computer Heuristical Input Locus Logical Identifier.
 
 
 pip install -U tk PyMuPDF pillow opencv-python imutils Nuitka opencv-python numpy
