@@ -57,7 +57,6 @@ def open_file(filename):
     for i, page in enumerate(doc):
         pix = page.get_pixmap(dpi=72, colorspace="RGB")
         img = PIL.Image.frombuffer("RGB", [pix.width, pix.height], pix.samples)  
-        
         img.thumbnail(thumb_size)
         thumb = PIL.ImageTk.PhotoImage(img)
         panel = tkinter.Label (canvas)
@@ -65,8 +64,8 @@ def open_file(filename):
         panel.config(image=thumb)
         panel.image = thumb
     
-    global first_page
-    first_page = chillimark.first_page(filename)#sneaky workaround to avoid loading time of first page.
+    global first_scan
+    first_scan = chillimark.first(filename)#sneaky workaround to avoid loading time of first page.
     return
 
 def choose_file():
@@ -90,7 +89,7 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered either the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
     
-    chillimark.main(filename,key_input,names_input,first_page)
+    chillimark.main(filename,key_input,names_input,first_scan)
     path_to_save = filename.replace(".pdf","")
     os.startfile(path_to_save)
 

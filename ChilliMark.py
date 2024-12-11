@@ -1,5 +1,4 @@
-import imutils.contours
-import imutils
+import multiprocessing
 import numpy
 import cv2
 import time
@@ -10,12 +9,10 @@ import csv
 import os
 import PIL
 import PIL.Image
-import operator
-import tkinter.messagebox
-import tkinter
-import PIL.Image
 import PIL.ImageTk
-import PIL
+import operator
+import tkinter
+
 
 
 #to do,
@@ -23,6 +20,17 @@ import PIL
 #scale also aligning pages
 #sort into columns also adding/aligning errant/missing bubbles
 #q_area as relative to alignment rect
+
+
+def timer(func):
+	def wrapper(*args, **kwargs):
+		begin = time.time()
+		result = func(*args, **kwargs)
+		# storing time after function execution
+		end = time.time()
+		print(func.__name__, end - begin)
+		return result
+	return wrapper
 
 
 class Parameters:
@@ -38,20 +46,18 @@ class Parameters:
 		self.text_shift = []
 		self.font_size = 0 #maybe shift this to markup class
 		self.rect = []
-		self.icon = icon_func()
+		#self.icon = icon_func()
 	
 	def set_bubble(self,template):
 		image = template[self.y1:self.y2,self.x1:self.x2]
-		y1,x1,y2,x2 = select_area(image[0:500,0:800],"Select one EMPTY Bubble")
+		y1,x1,y2,x2 = select_area(image[0:500,0:800],"Select one EMPTY bubble")
 		
 		image = get_thresh(image[y1:y2,x1:x2],blur=True)
 		outer, _ = cv2.findContours(image,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 		outer=outer[0]
 		outer = cv2.approxPolyDP(outer, 0.05*cv2.arcLength(outer, True), True)		
-
 		x, y, w, h = cv2.boundingRect(outer)#not the most elegant
 		image = cv2.bitwise_not(image)
-
 		image = cv2.rectangle(image,(x,y),(x+w,y+h),0,w//6)
 		image = image[y:y+h,x:x+w]
 		inner, _ = cv2.findContours(image,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)	
@@ -77,50 +83,70 @@ class Parameters:
 		self.text_shift = text_shift
 
 class Student:
-	def __init__(self,scan):
-		self.name = None
-		self.scan = scan
+	def __init__(self,name):
+		self.name = name
+		self.scan = None
 		self.answer = None
+	
+	@timer
+	def page_to_image(self,page):
+		pix = page.get_pixmap(dpi=600, colorspace="RGB")
+		self.scan = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
 
-def main(filename,key_input=None,names_input=None,first_page=None):
+class Question:
+	def __init__(self):
+		pass
 
-	if not first_page:
+def main(filename,key_input=None,names_input=None,first_scan=None):
+
+	if not first_scan.any():
+		print("no page")
 		doc = pymupdf.open(filename)
-		first_page = doc[0].get_pixmap(dpi=600, colorspace="RGB")
+		first_scan= first(filename)
+	
+	params = set_parameters(first_scan)
 
-	first_scan = numpy.frombuffer(buffer=first_page.samples, dtype=numpy.uint8).reshape((first_page.height, first_page.width, -1))	
-	bub = set_parameters(first_scan)
-	start=time.time()
-	students = []
+	#make list of students
+	
+	students = [] #maybe over here. make it return just the list
+	#pool = []
 	doc = pymupdf.open(filename)
 	num = len(doc)//10+1
-
 	for i,page in enumerate(doc): #get this running in the background while doing get parameters
-		pix = page.get_pixmap(dpi=600, colorspace="RGB")
-		image = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
-		student = Student(image)
-		student.name = f"Student {i+1:0{num}}"
+		student = Student(f"Student {i+1:0{num}}")
+		#proc = multiprocessing.Process(target=student.page_to_image, args=(page,))
+		student.page_to_image(page)
+		#proc.start()
+		#pool.append(proc)
 		students.append(student)
+		# pix = page.get_pixmap(dpi=600, colorspace="RGB")
+		# image = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
+		# student = Student(image)
+		# student.name = f"Student {i+1:0{num}}"
+		# students.append(student)
+	#for proc in pool:
+		#proc.join()
 
-	end = time.time()
-	print("open PDF", end-start)
 
-	key_letter, key_nums = inputs(key_input,names_input,students)	
-	bub.score_size = cv2.getTextSize(f"Score =  {len(key_letter)} / {len(key_letter)}",cv2.FONT_HERSHEY_SIMPLEX, 5,7)[0] #move elswhere
+
+
+	inputs(key_input,names_input,students,params)	
+	#move elswhere
 
 	for i, student in enumerate(students): #figure out multithreading or multiprocessing to deal with errors
 		start = time.time()
 		print(f"PAGE {i+1}")
-		process(student,bub,key_nums,key_letter)#see what classs can reduce this
+		process(student,params)#see what classs can reduce this
 		end = time.time()
 		print("Loop", end - start)
 
 	start=time.time()
-	make_output(filename,key_letter,students)
+	make_output(filename,params,students)
 	end = time.time()
 	print("Output", end-start)
 
 def rotation(page):
+	#do initial rotation
 	gray = cv2.cvtColor(page,cv2.COLOR_BGR2GRAY)
 	thresh= cv2.adaptiveThreshold(gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 35,4)
 	cnts,_ = cv2.findContours(thresh,cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
@@ -135,6 +161,7 @@ def rotation(page):
 	h,w = thresh.shape
 	Matrix = cv2.getRotationMatrix2D((w//2,h//2),angle,1)
 	rotated = cv2.warpAffine(page, Matrix, (w, h))
+	#Return info of key contour of the rotated image for future
 	gray = cv2.cvtColor(rotated,cv2.COLOR_BGR2GRAY)
 	thresh= cv2.adaptiveThreshold(gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 35,4)
 	thresh= cv2.rectangle(thresh,(0,0),(4800,6835),0,200)
@@ -146,12 +173,12 @@ def rotation(page):
 	rect = [rx,ry,rh,rw]
 	return rotated, rect
 
-def scale(image,bub,rect):
-	scale_x = bub.rect[2]/rect[2]
-	scale_y = bub.rect[3]/rect[3]
+def scale(image,params,rect):
+	scale_x = params.rect[2]/rect[2]
+	scale_y = params.rect[3]/rect[3]
 	if scale_x>1.02:
-		diff_x = bub.rect[2]-rect[2]
-		diff_y = bub.rect[3]-rect[3]
+		diff_x = params.rect[2]-rect[2]
+		diff_y = params.rect[3]-rect[3]
 		image = cv2.resize(image,(int(4800*scale_x),int(6835*scale_y)))
 		image = image[diff_y//2:diff_y//2+6835,diff_x//2:diff_x//2+4800]	
 	elif scale_x<0.98:
@@ -162,30 +189,25 @@ def scale(image,bub,rect):
 		image=cv2.copyMakeBorder(image,diff_y//2,diff_y//2,diff_x//2,diff_x//2,cv2.BORDER_CONSTANT, value=(255,255,255))
 	return image
 
-def process(student,bub,key_nums,key_letter):
+def process(student,params):
 	start = time.time()
 	image = numpy.array(student.scan)
 	image = cv2.resize(image,(4800,6835))#feed this into the alignment process too. See if we can eliminate one resize
 	image,rect= rotation(image)
-	image = scale(image,bub,rect)
-	q_area = image[bub.y1:bub.y2,bub.x1:bub.x2]
+	image = scale(image,params,rect)
+	q_area = image[params.y1:params.y2,params.x1:params.x2]
 	end = time.time()
 	print("Scale Time", end - start)
 
-	bubbles = find_bubbles(q_area,bub)
-	columns,choices = sort_into_columns(bubbles,bub)
-	sort_into_rows(bubbles,bub)
-	missing(bub,columns)
-	questions = find_questions(columns,choices,bub)
-	let_ans, q_area, score = find_answers(questions,q_area,key_nums,key_letter,bub)
+	bubbles = find_bubbles(q_area,params)
+	columns,choices = sort_into_columns(bubbles,params)
+	sort_into_rows(bubbles,params)
+	missing(columns,params)
+	questions = find_questions(columns,choices)
+	let_ans, q_area, score = find_answers(questions,q_area,params)
 
-	image[bub.y1:bub.y2,bub.x1:bub.x2] = q_area
-
-	if key_letter:
-		image= cv2.putText(image,f"Score = {score} / {len(key_letter)}",(4270-bub.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA)
-		image= cv2.putText(image,f"Score = {score} / {len(key_letter)}",(4270-bub.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)
-	image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
-	image[256:512,4288:4544]=bub.icon
+	image[params.y1:params.y2,params.x1:params.x2] = q_area
+	#remove. this it not a process but a markup
 	
 	student.scan = image
 	student.answer= let_ans
@@ -231,76 +253,60 @@ def	contour_center(contour):
 	cy = int(M['m01']/M['m00'])
 	return [cx,cy]
 
-def find_bubbles(q_area,bub):
+@timer
+def find_bubbles(q_area,params):
 	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
-	#change it to stop adding only the default bubbles. Can save that for only the final stage when they are being drawn. also don't need moments anymore. might beable to do it on pure average x and average y
 
-	start = time.time()
 	bubbles = []
 	thresh = get_thresh(q_area)
-	#gray = cv2.cvtColor(q_area, cv2.COLOR_BGR2GRAY)
-	#gray = cv2.GaussianBlur(gray,(5,5),4)
-	#thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV| cv2.THRESH_OTSU)[1] 
 	cnts,hier = cv2.findContours(thresh,cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
 
 	sorted_cnts = []
-	for i, c in enumerate(cnts): #Not using filter because filter condition is in seperate list
+	for i, c in enumerate(cnts): 
 		if hier[0][i][3]==-1:
 			sorted_cnts.append(c)
 	sorted_cnts = sorted(sorted_cnts, key=largest, reverse=True)
 
-	limit = 0.9*bub.h*bub.w
-	min_w= int(bub.w*0.9)
-	min_h = int(bub.h*0.9)
-	max_w = int(bub.w*1.5)
-	max_h = int(bub.h*1.5)
+	limit = 0.9*params.h*params.w
+	min_w= int(params.w*0.9)
+	min_h = int(params.h*0.9)
+	max_w = int(params.w*1.5)
+	max_h = int(params.h*1.5)
 	version = None
-	if bub.w>bub.h*2:
+	if params.w>params.h*2:
 		version = "ig"
 	for c in sorted_cnts:
 		_, _, w, h = cv2.boundingRect(c)
 		if w*h<limit:	
-			#print(w*h,limit)
 			break
 		if min_w<= w <= max_w and min_h <= h <= max_h: 
 			bubbles.append(contour_center(c))
 			continue
 		if version == "ig":
 			continue
-		if h<bub.h*4.5:
-			messy(c,q_area,bub,bubbles)
-
-	end = time.time()
-	print("bubbles", end - start)
-	hi,wi,_ = q_area.shape 
-	#cv2.drawContours(q_area,bubbles,-1,(0,0,255),3)
-	#cv2.imshow("",cv2.resize(q_area,(wi//4,hi//4)))
-	#cv2.waitKey(0)
+		if h<params.h*4.5:
+			messy(c,q_area,params,bubbles)
 	return bubbles
 
-def messy(c,q_area,bub,bubbles):
+def messy(c,q_area,params,bubbles):
 	#very ugly. need to refactor and fix
-	#call whole function messy. divide into two sections called the erosion pass and slicing pass
-	
+	#call whole function messy. divide into two sections called the erosion pass and slicing pass	
 	erode_mask = numpy.zeros(q_area.shape, dtype="uint8") 
-	erode_mask = cv2.drawContours(erode_mask,[c],-1,(255,255,255),-1) 				#cv2.imshow("",cv2.resize(erode_mask,(700,700))) #cv2.waitKey(0)
+	erode_mask = cv2.drawContours(erode_mask,[c],-1,(255,255,255),-1) 						#cv2.imshow("",cv2.resize(erode_mask,(700,700))) #cv2.waitKey(0)
 	kernel = numpy.ones((31, 31), numpy.uint8)
 	erode_mask = cv2.erode(erode_mask,kernel=kernel,iterations=1)
-	erode_mask = cv2.cvtColor(erode_mask,cv2.COLOR_RGB2GRAY) 		
-	#cv2.imshow("",cv2.resize(erode_mask,(700,700)))
-	#cv2.waitKey(0)
-	#cv2.imshow("",cv2.resize(erode_mask,(700,700))) #cv2.waitKey(0)
+	erode_mask = cv2.cvtColor(erode_mask,cv2.COLOR_RGB2GRAY) 								#cv2.imshow("",cv2.resize(erode_mask,(700,700)))#cv2.waitKey(0)#cv2.imshow("",cv2.resize(erode_mask,(700,700))) #cv2.waitKey(0)
 	erode_cnts,_= cv2.findContours(erode_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 	for e_cnt in erode_cnts: 
 		x, y, w, h = cv2.boundingRect(e_cnt)
-		if bub.w*0.5 <= w <= bub.w*1.5 and bub.h*0.5 <= h <= bub.h*1.5:
+		if params.w*0.5 <= w <= params.w*1.5 and params.h*0.5 <= h <= params.h*1.5:
 			bubbles.append(contour_center(e_cnt))
 			continue
 		slice_mask = numpy.zeros(q_area.shape, dtype="uint8") 
 		slice_mask = cv2.drawContours(slice_mask,[e_cnt],-1,(255,255,255),-1)
-		x_scale = w//bub.w+1
-		y_scale = h//bub.h
+		x_scale = w//params.w+1
+		y_scale = h//params.h
 		j=1
 		while j<x_scale:
 			cv2.line(slice_mask,(x+j*w//x_scale,y-10),(x+j*w//x_scale,y+h+10),(0,0,0),15)
@@ -313,10 +319,10 @@ def messy(c,q_area,bub,bubbles):
 		slice_cnts,_= cv2.findContours(slice_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)		#cv2.imshow("",cv2.resize(slice_mask,(700,700)))	#cv2.waitKey(0)
 		for s_cnt in slice_cnts: 
 			_, _, sw, sh = cv2.boundingRect(s_cnt)
-			if bub.w*0.5 <= sw <= bub.w*1.5 and bub.h*0.5 <= sh <= bub.h*1.5:
+			if params.w*0.5 <= sw <= params.w*1.5 and params.h*0.5 <= sh <= params.h*1.5:
 				bubbles.append(contour_center(s_cnt))
 
-def sort_into_columns(bubbles,bub=None):
+def sort_into_columns(bubbles,params=None):
 	"""Sorts them from left to right. 
 	Then if the gap between the left side of a bubble is more than half the width of a bubble of the previous it makes a new column
 	Columns are then sorted from top to bottom"""
@@ -333,7 +339,7 @@ def sort_into_columns(bubbles,bub=None):
 		x,_ = bubble
 		if abs(prev_x-x)/jump > 1.1: #hmm does not need to be nested. I would also get rid ot count here eventually
 			count.append(0) 
-		if abs(x-prev_x) > bub.w//2 and i>0:
+		if abs(x-prev_x) > params.w//2 and i>0:
 			col_index +=1
 			columns.append([])
 			count[-1] += 1
@@ -358,14 +364,14 @@ def sort_into_columns(bubbles,bub=None):
 			x_pos.append(r[0])
 		avg = sum(x_pos)/len(x_pos)
 		col_avg.append(int(avg))
-	bub.col_avg = col_avg
+	params.col_avg = col_avg
 
 	end = time.time()
 	print("sort",end - start)
 	return columns, choices
 
 
-def sort_into_rows(bubbles,bub):
+def sort_into_rows(bubbles,params):
 	"""Sorts them from left to right. 
 	Then if the gap between the left side of a bubble is more than half the width of a bubble of the previous it makes a new column
 	Columns are then sorted from top to bottom"""
@@ -377,7 +383,7 @@ def sort_into_rows(bubbles,bub):
 	row_index = 0
 	for i, bubble in enumerate(bubbles):	 
 		x,y= bubble
-		if abs(y-prev_y) > bub.h and i>0:
+		if abs(y-prev_y) > params.h and i>0:
 			row_index +=1
 			rows.append([])
 		rows[row_index].append(bubble)
@@ -397,53 +403,52 @@ def sort_into_rows(bubbles,bub):
 			y_pos.append(y)
 		avg = sum(y_pos)/len(y_pos)
 		row_avg.append(int(avg))
-	bub.row_avg = row_avg
-	bub.y_jump = int((row_avg[-1]-row_avg[0])/len(row_avg))
+	params.row_avg = row_avg
+	params.y_jump = int((row_avg[-1]-row_avg[0])/len(row_avg))
 	return rows
 
-def missing(bub,columns):
+def missing(columns,params):
 	columns_copy=columns.copy()
 	for c, column in enumerate(columns_copy):
 		offset=0
 		for r, row in enumerate(column):
 			x,y = row
-			if 10<abs(y-bub.row_avg[r+offset])<int(bub.y_jump-20):
+			if 10<abs(y-params.row_avg[r+offset])<int(params.y_jump-20):
 				columns[c].pop(r+offset)
 				offset-=1
 				continue
-			elif abs(y-bub.row_avg[r+offset])>bub.h:
-				column.insert(r,[x,bub.row_avg[r+offset]])
-		if len(bub.row_avg)>len(column):
-			column.append([bub.col_avg[c],bub.row_avg[-1]])
+			elif abs(y-params.row_avg[r+offset])>params.h:
+				column.insert(r,[x,params.row_avg[r+offset]])
+		if len(params.row_avg)>len(column):
+			column.append([params.col_avg[c],params.row_avg[-1]])
 		columns[c] = column
 	return (columns)
 
-def find_questions(columns,choices,bub):
+def find_questions(columns,choices):
 	"""Goes through the columns to build sets of contours based on user defined number of choices"""
 
-	#rehaul it should jut group column by choices. deal with questions on a different pass
+	#this first part takes the different section of columns and collects them into single list
+	#rest of function still uses lists so will not use numpy array yey unless major future refactor
 	start = time.time()
+
+	stack = [[]]*choices
+	for c, column in enumerate(columns):
+		index = c%choices
+		stack[index]= stack[index]+column
+
 	questions=[]
-	c=0
-	while c < len(columns): 
-		for r, row in enumerate(columns[c]):
-			
-			i=0
-			question=[]
-			while i<choices:
-				if len(columns[c])>len(columns[c+i]):
-					i+=1
-					continue
-				question.append(columns[c+i][r])
-				i+=1
-			questions.append(question)
-		c+=choices
+	for r,row in enumerate(stack[0]):
+		question=[]
+		for column in stack:
+			question.append(column[r])
+		questions.append(question)
+	
 	end = time.time()
 	print("questions", end - start)
 
 	return questions
 
-def find_answers(questions,image,key_nums,key_letter,bub):
+def find_answers(questions,image,params):
 	#rename this into responses to make it clear answer vs response
 	start = time.time()
 	answers = []
@@ -452,12 +457,14 @@ def find_answers(questions,image,key_nums,key_letter,bub):
 	thresh = cv2.threshold(thresh,0,255,cv2.THRESH_BINARY_INV| cv2.THRESH_OTSU)[1] 
 
 	marked = image.copy()
-	area = cv2.contourArea(bub.inner)
+	area = cv2.contourArea(params.inner)
 	limit = 5.5*math.sqrt(area)
 	for q,question in enumerate(questions):
 		answer = []	
+		
+		#def find_fills()
 		for bubble in question:
-			fill_con = bub.inner + bubble
+			fill_con = params.inner + bubble
 			x,y,w,h= cv2.boundingRect(fill_con)
 			temp = thresh[y:y+h,x:x+w]
 			mask = numpy.zeros(temp.shape, dtype="uint8") 
@@ -466,15 +473,16 @@ def find_answers(questions,image,key_nums,key_letter,bub):
 			if fill < limit:
 				fill = 0
 			else:
-				marked = cv2.drawContours(marked, [bubble+bub.outer], -1, (250,170,0), 5,cv2.LINE_AA)
+				marked = cv2.drawContours(marked, [bubble+params.outer], -1, (250,170,0), 5,cv2.LINE_AA)
 			answer.append(fill)
-			
+
+		#def determine_responses	
 		max_fill = max(answer)
 		if max_fill==0:
 			answers.append("Blank")
 		elif answer.count(0) < 3:
 			choose = tkinter.Toplevel()
-			unclear = image[max(question[0][1]-bub.y_jump+10,1):min(6834,question[0][1]+bub.y_jump-10),max(0,question[0][0]-bub.w*2):min(4799,question[-1][0]+bub.w)]
+			unclear = image[max(question[0][1]-params.y_jump+10,1):min(6834,question[0][1]+params.y_jump-10),max(0,question[0][0]-params.w):min(4799,question[-1][0]+params.w)]
 			img = PIL.Image.fromarray(unclear)
 			imgtk = PIL.ImageTk.PhotoImage(image = img)
 			def button(b="Unclear",answers=answers, q=q, choose=choose):
@@ -492,10 +500,11 @@ def find_answers(questions,image,key_nums,key_letter,bub):
 			choose.wait_window()
 		else:
 			answers.append(answer.index(max(answer)))
-	
-		if key_nums.get(q) != None: #mark correct answer
-			marked = add_markup((0,170,0),question[key_nums.get(q)],key_letter.get(q),marked,bub)	
+		#adds green letters
+		if params.key_nums.get(q) != None: #mark correct answer
+			marked = add_markup((0,170,0),question[params.key_nums.get(q)],params.key_letter.get(q),marked,params)	
 
+	#draws the red and green boxes
 	let_answers=answers[:]
 	score = 0
 	for a, answer in enumerate(answers):
@@ -503,16 +512,18 @@ def find_answers(questions,image,key_nums,key_letter,bub):
 			let_answers[a] = chr(answer+65)
 		else:
 			let_answers[a] = answer
-		if answer == key_nums.get(a): #draw green box
+		if answer == params.key_nums.get(a): #draw green box
 			score+=1
-			marked = cv2.drawContours(marked, [questions[a][answer]+bub.outer], -1, (0,170,0), 5,cv2.LINE_AA)
+			marked = cv2.drawContours(marked, [questions[a][answer]+params.outer], -1, (0,170,0), 5,cv2.LINE_AA)
 		elif answer == "Unclear":
 			continue
 		elif answer != "Blank":
-			marked = cv2.drawContours(marked, [questions[a][answer]+bub.outer], -1, (200,0,0), 5,cv2.LINE_AA)
+			marked = cv2.drawContours(marked, [questions[a][answer]+params.outer], -1, (200,0,0), 5,cv2.LINE_AA)
 
 	end = time.time()
 	print("answer", end - start)
+
+	#because student is not passed to the function i cannot assign student.score here. but I want to
 	return let_answers, marked, score
 
 def set_parameters(first_page):
@@ -520,15 +531,17 @@ def set_parameters(first_page):
 	template = cv2.resize(template,(4800,6835))
 	template,rect = rotation(template)
 	y1,x1,y2,x2 = (select_area(template,"Select question area",True))
-	bub = Parameters(y1,x1,y2,x2)
-	bub.rect = rect
-	while bub.set_bubble(template)==False:
-		bub.set_bubble(template)
-	bub.set_markup_size()
-	return bub
+	params = Parameters(y1,x1,y2,x2)
+	params.rect = rect
+	while params.set_bubble(template)==False:
+		params.set_bubble(template)
+	params.set_markup_size()
+	return params
 
-def make_output(filename,key_letter,students):
+def make_output(filename,params,students):
+	#too many parts with too many jobs
 	
+	icon = icon_func()
 	basename = os.path.basename(filename)
 	basename = basename.replace(".pdf","")
 	path_to_save = filename.replace(".pdf","")
@@ -538,40 +551,63 @@ def make_output(filename,key_letter,students):
 
 	file = open(f"{path_to_save}/{basename}.csv", 'w' ,newline='')
 	writer = csv.writer(file, dialect='excel', )
-	writer.writerow(["Student Name"]+[f"Out of {len(key_letter)}"]+list(key_letter.keys()))
-	writer.writerow(["Answer Key"]+[""]+list(key_letter.values()))
+	writer.writerow(["Student Name"]+[f"Out of {len(params.key_letter)}"]+list(params.key_letter.keys()))
+	writer.writerow(["Answer Key"]+[""]+list(params.key_letter.values()))
 	marked_pdf = pymupdf.open()
 	if not(os.path.exists(f"{path_to_save}/single pages") and os.path.isdir(f"{path_to_save}/single pages")):
 		os.mkdir(f"{path_to_save}/single pages")
 	stats_raw = []
 	for i, student in enumerate(students):
-		writer.writerow([student.name]+[student.score]+student.answer)
-		string = student.name.replace(",", "")
-		student.scan=cv2.putText(student.scan,string,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(255,255,255),25)
-		student.scan=cv2.putText(student.scan,string,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(0,0,0),10)
-		jpeg_path =f"{path_to_save}/single pages/{string}.jpg" #need to figure out how to make the zipfile able to add subdir
+		
+		#add scores to page. These first three should be added to the find answer section. But these are outside the area of q_area. Place in in the section before make output
+		#THen that section should also have the markup parts taken out
+		if params.key_letter:
+			student.scan = cv2.putText(student.scan,f"Score = {student.score} / {len(params.key_letter)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA)
+			student.scan= cv2.putText(student.scan,f"Score = {student.score} / {len(params.key_letter)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)
+		
+		#change to RGB and add icon
+		student.scan = cv2.cvtColor(student.scan,cv2.COLOR_BGR2RGB)		
+		student.scan[256:512,4288:4544]=icon
+		
+		#add student name to page
+		student.string = student.name.replace(",", "")
+		#string = student.name.replace(",", "")
+		student.scan=cv2.putText(student.scan,student.string,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(255,255,255),25)
+		student.scan=cv2.putText(student.scan,student.string,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(0,0,0),10)
+		
+		#save page image
+		jpeg_path =f"{path_to_save}/single pages/{student.string}.jpg" #need to figure out how to make the zipfile able to add subdir
 		#jpeg_path =f"{path_to_save}/{string}.jpg"
-
-		pil_scan = PIL.Image.fromarray(student.scan[:,:,::-1])
-		#bio = io.BytesIO()
-		#pil_scan.save(bio,"jpeg")
-		#bytes_scan = pymupdf.open('jpg',bio.getvalue()) (save incase web version cannot write)
+		#keeping incase future implementation r equires working from memory	#bio = io.BytesIO()	#pil_scan.save(bio,"jpeg")	#bytes_scan = pymupdf.open('jpg',bio.getvalue()) (save incase web version cannot write)
+		pil_scan = PIL.Image.fromarray(student.scan[:,:,::-1])					#dont know what the [:,:,::-1] is for
 		pil_scan.save(jpeg_path)
-		bytes_scan = pymupdf.open(jpeg_path)                #bytes_scan = pymupdf.open('png',student.scan)
+		bytes_scan = pymupdf.open(jpeg_path)                					#bytes_scan = pymupdf.open('png',student.scan)
 		pdfbytes = bytes_scan.convert_to_pdf()
-		rect = bytes_scan[0].rect                           #bytes_scan.close()
+		rect = bytes_scan[0].rect                           					#bytes_scan.close()
 		pdf_scan = pymupdf.open("pdf", pdfbytes)
 		page = marked_pdf._newPage(width=rect.width, height=rect.height)
 		page.show_pdf_page(rect,pdf_scan,0) 
+
+
+		#write info to CSV
+		writer.writerow([student.name]+[student.score]+student.answer)
+		#add data to array for future stats manipulation
 		stats_raw.append(student.answer)
+
 	stats_raw= zip(*stats_raw)
 
 	marked_pdf.save(f"{path_to_save}/ChilliMark-{basename}.pdf")
 
-	stats = [] 
-	options = sorted(set(key_letter.values()))
+
+	#dealing with stats can be made into its own function
+	stats = [] 	
 	csv_stats = [["Correct"]]
 	rates = {"Correct": 0}
+
+	
+	#this part prepopulate the omptios into ABCd
+	#this will break if any answer key does not include on of the option. e.g ABDDBA misses C
+	options = sorted(set(params.key_letter.values())) 
 	for option in options:
 		rates.update({option : 0})
 		csv_stats.append([option])    
@@ -581,7 +617,7 @@ def make_output(filename,key_letter,students):
 		for ans in row:
 			if rate.get(ans)!= None:
 				rate[ans]=rate.get(ans) + 1
-			if ans == key_letter.get(i) and key_letter:
+			if ans == params.key_letter.get(i) and params.key_letter:
 				rate["Correct"] = rate.get("Correct") +1
 		stats.append(rate.values())
 
@@ -593,35 +629,37 @@ def make_output(filename,key_letter,students):
 	for x in csv_stats:
 		writer.writerow([""]+x)
 
-def first_page(filename):
+def first(filename):
 	doc = pymupdf.open(filename)
-	return doc[0].get_pixmap(dpi=600, colorspace="RGB")
+	first_page = doc[0].get_pixmap(dpi=600, colorspace="RGB")
+	first_scan = numpy.frombuffer(buffer=first_page.samples, dtype=numpy.uint8).reshape((first_page.height, first_page.width, -1))	
+	return first_scan	
 
-def inputs(key_input,names_input,students):
-	key_nums={}
-	key_letter={}
+def inputs(key_input,names_input,students,params):
+	params.key_nums={}
+	params.key_letter={}
 	print(names_input)
-
 	if key_input:
 		key_input = "".join(x for x in key_input if x.isalpha())
 		key_input = key_input.upper()
 	for i, ans in enumerate(key_input):    
-		key_nums[i]=ord(ans)-65
-		key_letter[i]=ans
-
+		params.key_nums[i]=ord(ans)-65
+		params.key_letter[i]=ans
+	if key_input:
+		params.score_size = cv2.getTextSize(f"Score =  {len(params.key_letter)} / {len(params.key_letter)}",cv2.FONT_HERSHEY_SIMPLEX, 5,7)[0]
+	
 	if names_input:
 		names_input = names_input.title()
 		names_input = names_input.split("\n")
 		for i, name in enumerate(names_input):
 			students[i].name = name.rstrip(", ") if name else students[i].name
-	return key_letter, key_nums
 
-def add_markup(colour,bubble,choice,image,bub):
+def add_markup(colour,bubble,choice,image,params):
 	x,y = bubble
-	text_y = y+bub.text_shift[1]
-	text_x = x+bub.text_shift[0]
-	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, bub.font_size,(255,255,255),20,lineType=cv2.LINE_AA) 
-	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, bub.font_size,colour,7,lineType=cv2.LINE_AA) 
+	text_y = y+params.text_shift[1]
+	text_x = x+params.text_shift[0]
+	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, params.font_size,(255,255,255),20,lineType=cv2.LINE_AA) 
+	cv2.putText(image,choice, (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, params.font_size,colour,7,lineType=cv2.LINE_AA) 
 	return image
 
 def icon_func():
@@ -633,7 +671,7 @@ def largest(n):
 	_,_,w,h = cv2.boundingRect(n)
 	return h*w
 
-if __name__ == '__main__':
-    main()
+#if __name__ == '__main__':
+    #main()
 
 
