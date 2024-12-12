@@ -1,4 +1,5 @@
-import multiprocessing
+import multiprocess
+import multiprocess.pool
 import numpy
 import cv2
 import time
@@ -46,7 +47,7 @@ class Parameters:
 		self.text_shift = []
 		self.font_size = 0 #maybe shift this to markup class
 		self.rect = []
-		#self.icon = icon_func()
+
 	
 	def set_bubble(self,template):
 		image = template[self.y1:self.y2,self.x1:self.x2]
@@ -88,14 +89,20 @@ class Student:
 		self.scan = None
 		self.answer = None
 	
-	@timer
-	def page_to_image(self,page):
-		pix = page.get_pixmap(dpi=600, colorspace="RGB")
-		self.scan = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
 
 class Question:
 	def __init__(self):
 		pass
+
+def page_to_image(filename,i,params):
+	doc = pymupdf.open(filename)
+	pix = doc[i].get_pixmap(dpi=600, colorspace="RGB")
+	image = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
+	image = numpy.array(image)
+	image = cv2.resize(image,(4800,6835)) #feed this into the opening multiprocess stage
+	image,rect= rotation(image)
+	image = scale(image,params,rect)
+	return image
 
 def main(filename,key_input=None,names_input=None,first_scan=None):
 
@@ -109,23 +116,25 @@ def main(filename,key_input=None,names_input=None,first_scan=None):
 	#make list of students
 	
 	students = [] #maybe over here. make it return just the list
-	#pool = []
-	doc = pymupdf.open(filename)
+	
+	start=time.time()
+	doc = pymupdf.open(filename) #probably unecessary. remove after getting the returning of image correct
+
 	num = len(doc)//10+1
+	pages = [] #creating tupples to pass to the parallel processing function
+
 	for i,page in enumerate(doc): #get this running in the background while doing get parameters
 		student = Student(f"Student {i+1:0{num}}")
-		#proc = multiprocessing.Process(target=student.page_to_image, args=(page,))
-		student.page_to_image(page)
-		#proc.start()
-		#pool.append(proc)
 		students.append(student)
-		# pix = page.get_pixmap(dpi=600, colorspace="RGB")
-		# image = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
-		# student = Student(image)
-		# student.name = f"Student {i+1:0{num}}"
-		# students.append(student)
-	#for proc in pool:
-		#proc.join()
+		pages.append([filename,i,params])
+
+	pool = multiprocess.Pool(multiprocess.cpu_count()) #use the propper multiprocessing pool
+	results = pool.starmap(page_to_image,pages)
+
+	for i, student in enumerate(students):
+		student.scan = results[i]
+
+	print("open docs",time.time()-start)
 
 
 
@@ -133,7 +142,7 @@ def main(filename,key_input=None,names_input=None,first_scan=None):
 	inputs(key_input,names_input,students,params)	
 	#move elswhere
 
-	for i, student in enumerate(students): #figure out multithreading or multiprocessing to deal with errors
+	for i, student in enumerate(students): #figure out multithreading or multiprocess to deal with errors
 		start = time.time()
 		print(f"PAGE {i+1}")
 		process(student,params)#see what classs can reduce this
@@ -187,14 +196,18 @@ def scale(image,params,rect):
 		diff_x=4800-width
 		diff_y=6835-height
 		image=cv2.copyMakeBorder(image,diff_y//2,diff_y//2,diff_x//2,diff_x//2,cv2.BORDER_CONSTANT, value=(255,255,255))
+	#need to add a way that it actually aligns the key contour to the same position
+	
 	return image
 
 def process(student,params):
 	start = time.time()
-	image = numpy.array(student.scan)
-	image = cv2.resize(image,(4800,6835))#feed this into the alignment process too. See if we can eliminate one resize
-	image,rect= rotation(image)
-	image = scale(image,params,rect)
+
+	#image = numpy.array(student.scan)
+	image = student.scan
+	# image = cv2.resize(image,(4800,6835)) #feed this into the opening multiprocess stage
+	# image,rect= rotation(image)
+	# image = scale(image,params,rect)
 	q_area = image[params.y1:params.y2,params.x1:params.x2]
 	end = time.time()
 	print("Scale Time", end - start)
@@ -257,7 +270,6 @@ def	contour_center(contour):
 def find_bubbles(q_area,params):
 	"""Goes through contour and returns List of only those of similar size to user defined bubble"""
 
-
 	bubbles = []
 	thresh = get_thresh(q_area)
 	cnts,hier = cv2.findContours(thresh,cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
@@ -271,8 +283,8 @@ def find_bubbles(q_area,params):
 	limit = 0.9*params.h*params.w
 	min_w= int(params.w*0.9)
 	min_h = int(params.h*0.9)
-	max_w = int(params.w*1.5)
-	max_h = int(params.h*1.5)
+	max_w = int(params.w*2)
+	max_h = int(params.h*2)
 	version = None
 	if params.w>params.h*2:
 		version = "ig"
@@ -365,7 +377,7 @@ def sort_into_columns(bubbles,params=None):
 		avg = sum(x_pos)/len(x_pos)
 		col_avg.append(int(avg))
 	params.col_avg = col_avg
-
+	print(col_avg)
 	end = time.time()
 	print("sort",end - start)
 	return columns, choices
@@ -413,11 +425,14 @@ def missing(columns,params):
 		offset=0
 		for r, row in enumerate(column):
 			x,y = row
-			if 10<abs(y-params.row_avg[r+offset])<int(params.y_jump-20):
+			if 20<abs(y-params.row_avg[r+offset])<int(params.y_jump-20):
+				print("Pop row ",r," Column",c)
+				print("popping", row, y-params.row_avg[r+offset],params.y_jump-20)
 				columns[c].pop(r+offset)
 				offset-=1
 				continue
 			elif abs(y-params.row_avg[r+offset])>params.h:
+				print("Insert row ",r," Column",c)
 				column.insert(r,[x,params.row_avg[r+offset]])
 		if len(params.row_avg)>len(column):
 			column.append([params.col_avg[c],params.row_avg[-1]])
@@ -440,6 +455,7 @@ def find_questions(columns,choices):
 	for r,row in enumerate(stack[0]):
 		question=[]
 		for column in stack:
+			#print(r)
 			question.append(column[r])
 		questions.append(question)
 	
@@ -671,7 +687,7 @@ def largest(n):
 	_,_,w,h = cv2.boundingRect(n)
 	return h*w
 
-#if __name__ == '__main__':
-    #main()
+if __name__ == '__main__':
+    pass
 
 
