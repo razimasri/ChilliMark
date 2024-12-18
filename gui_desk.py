@@ -96,13 +96,22 @@ def mark_exam():
 def main():
     global filename
     filename = None
-
-    root = tkinter.Tk()
     windll.shcore.SetProcessDpiAwareness(1)
+
+    gui_root()
+
+def gui_process():
+
+    process_gui = tkinter.Tk()
+    process_gui.mainloop()
+
+
+def gui_root():
+    
+    root = tkinter.Tk()
     icon = PIL.ImageTk.PhotoImage(file="icons\Icon128.png")
     version = ["v0.9","Capsaicin"]
     #version = ["v1.0","Adjuma"]
-
     root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="icons\Icon16.ico"))
     root.title("Chilli Marker")
     global palette
@@ -168,7 +177,6 @@ def main():
     file_btn.pack(side="bottom",pady=(0,10),fill="x")
 
     root.mainloop()
-
 if __name__ == '__main__':
     main()
 
