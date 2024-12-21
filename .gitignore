@@ -1,7 +1,6 @@
-
-gui_desk.build
-gui_desk.dist
-gui_desk.onefile-build
+ChilliMark.build
+ChilliMark.dist
+ChilliMark.onefile-build
 .venv/
 .vscode
 .env

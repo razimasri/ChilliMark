@@ -1,5 +1,7 @@
 import multiprocessing
 import multiprocessing.pool
+import multiprocessing.process
+import threading
 import numpy
 import cv2
 import time
@@ -16,31 +18,70 @@ import tkinter
 import tkinter.filedialog
 import tkinter.font
 import tkinter.messagebox
-import tkinter.ttk
 import tksvg
 import tkinterdnd2
 import tkinterdnd2.TkinterDnD
 import ctypes
+import random
 
+#images are set to 4800 vs 6784.
+#This is close to the A4 Ratio and the 600dpi scan
+#based on 4800 is 2^6,3^1,5^2 and 6784 2^7,53
 
-#to do,
+class Question:
+	
+	colour = {"red": (0,0,200),"yellow": (0,170,250),"green": (0,170,0)}
+	
+	class Box:
+		def __init__(self,xy,i):
+			self.xy = xy
+			self.letter = chr(i+65)
+			self.colour = None
+			self.bool = False
+	
+		def fill(self,params,thresh):
+			contour = params.inner + self.xy
+			x,y,w,h= cv2.boundingRect(contour)
+			temp = thresh[y:y+h,x:x+w]
+			mask = numpy.zeros(temp.shape, dtype="uint8") 
+			mask = cv2.bitwise_and(temp, temp, mask)
+			if cv2.countNonZero(mask) > params.fill_limit:
+				self.bool = True
+				self.colour = "yellow"
 
-#scale also aligning pages
-#q_area as relative to alignment rect
-
-
-def timer(func):
-	def wrapper(*args, **kwargs):
-		begin = time.time()
-		result = func(*args, **kwargs)
-		# storing time after function execution
-		end = time.time()
-		print(func.__name__, end - begin)
-		return result
-	return wrapper
-
+	def __init__(self,r):
+		self.response = "Blank"
+		self.boxes = []
+		self.response_box = None
+		self.number = r
+	
+	def get_response(self):
+		for box in self.boxes:
+			if box.bool:
+				self.response=box.letter
+				self.response_box=box
+				box.colour = "red"
+	
+	def annotate(self,params,image,colour=colour): 
+		#the logic of the two annotate functions is slightly different. 
+		# This time we do no want to skip unclear. 
+		# We are also avoiding a later RGB colour flip
+		if self.response =="Blank":
+			return
+		for box in self.boxes:
+			if box.bool:
+				cv2.drawContours(image, [box.xy+params.outer], -1, colour.get(box.colour), 5,cv2.LINE_AA)
 
 class Gui:	
+
+	palette = { 
+		"darktext" : "#280e0d",
+		"frame" : "#571622",
+		"whitespace" : "#e3e5ef",
+		"lighttext" : "#e3e5ef",
+		"bg": "#8c1529",
+		"button": "#b1a1a4"}
+	
 	class Rectangle:
 		def __init__(self):
 			self.rect = None
@@ -52,66 +93,374 @@ class Gui:
 			self.y1true = 1
 			self.x2true = 1
 			self.y2true = 1
+	
+	class Anim_Box:
+		
+		def __init__(self,frame,i,wide):
+			self.canvas=tkinter.Canvas(frame,bd=0,highlightthickness=0, bg=Gui.palette.get("frame"),width=110, height=110)
+			self.canvas.grid(row=i//wide, column=i%wide,sticky="nsew")
+			self.index = i
+
+		def round(self):
+			size=90
+			radius = 20
+			corners= [(10,10),(10+size,10),(10+size,10+size),(10,10+size)]
+			_pattern = [1,1,-1,1,-1,-1,1,-1]
+			offset = [radius*i for i in _pattern]
+			offset = list(zip(offset[::2], offset[1::2]))
+			points=[]
+			for i,point in enumerate(corners):
+				x,y = point
+				ox,oy = offset[i]
+				new_x = x+ox
+				new_y = y+oy
+				if i%2:
+					points.append([new_x,y,x,y,x,new_y])
+					continue
+				points.append([x,new_y,x,y,new_x,y])
+
+			self.poly = self.canvas.create_polygon(points,smooth=1, splinesteps=30,fill="",outline=Gui.palette.get("bg"), width=5)
+			self.cover = self.canvas.create_arc(-10,-10,120,120,outline="", fill=Gui.palette.get("frame"),start=0,extent=0, stipple="gray25")
+		
+		def swipe(self,boxes):
+			x=math.degrees(4*(time.time()-self.time))%360
+			if (time.time()-self.time)>3.14:
+				self.canvas.itemconfig(self.cover,start= 0, extent=0)
+				boxes.insert(random.randint(0,len(boxes)-1),self)
+				self.colour = f"#{random.randrange(256**3):06x}"
+				return
+			if (time.time()-self.time)<1.57:
+				self.canvas.itemconfig(self.cover, start = self.start, extent=x)
+			else:
+				self.canvas.itemconfig(self.cover, start = self.start, extent=x-360)
+			self.canvas.after(100, lambda: self.swipe(boxes))
 
 	def __init__(self):
 		self.root = tkinterdnd2.TkinterDnD.Tk()	
-		#self.icon = PIL.ImageTk.PhotoImage(file="icons\icon128.png")
+		
+		self.version = ["v1.0","Adjuma"] #["v0.9","Capsaicin"]
+
 		self.icon = tksvg.SvgImage(file="icons\iconwhite.svg", scaletoheight = 128 )
-		#self.version = ["v0.9","Capsaicin"]
-		self.version = ["v1.0","Adjuma"]
+		self.sel_img = tksvg.SvgImage(file="icons\selection.svg")
+		self.pdf_icon = tksvg.SvgImage(file="icons\pdf.svg", scaletoheight = 256 )
+		self.frames = [PIL.Image.open(f"icons\\animations\\pageprocess\\{file}") for file in os.listdir("icons\\animations\\pageprocess")]
 		self.root.tk.call('wm', 'iconphoto', self.root._w, PIL.ImageTk.PhotoImage(file="icons\Icon16.ico"))
+
 		self.root.title("Chilli Marker")
-		self.palette = {
-			"darktext" : "#280e0d",
-			"frame" : "#571622",
-			"whitespace" : "#e3e5ef",
-			"lighttext" : "#e3e5ef",
-			"bg": "#8c1529",
-			"button": "#b1a1a4",
-			"prog_bar":"#00713e"}
-		self.root.configure(bg=self.palette.get("bg"), borderwidth=2)
-		self.root.geometry("920x750")
+		self.root.configure(borderwidth=2,background=Gui.palette.get("bg"))
+		self.root.geometry("1020x893")
 		self.root.resizable(False, False)
+
 		self.default_font = tkinter.font.nametofont("TkDefaultFont")
 		self.small_font=self.default_font.copy()
 		self.default_font.configure(size=14, weight="bold")
 		self.small_font.configure(size=10)
 		self.root.option_add("*Font", self.default_font)
-		self.root.columnconfigure(0, weight=1)
-		self.root.rowconfigure(1, weight=1)
+		self.root.columnconfigure(index=1, weight=1)
+		self.root.rowconfigure(index=1, weight=2)
 
-	def q_mouse_posn(self,event):
+		self.next = tkinter.BooleanVar(value=False)
+		
+
+
+	def home(self):
+		self.destroy_children(self.root)
+
+
+		#Drag and Drop Files
+		self.root.drop_target_register(tkinterdnd2.DND_FILES)
+		self.root.dnd_bind('<<Drop>>', lambda event: self.open_file(event.data))
+
+		self.canvas_frame = tkinter.Frame(self.root,bg=Gui.palette.get("frame"), height=868, width=622, bd=0, highlightthickness=0, relief='ridge', cursor="hand2")
+		self.canvas_frame.grid(padx=10, pady=10, column=0,row=0,rowspan=3,sticky="nsew")
+		self.canvas_frame.columnconfigure(index=0, weight=1,minsize=622)
+		self.canvas_frame.rowconfigure(index=0, weight=1,minsize=868)
+		self.canvas_frame.propagate(False)
+		self.pdf = tkinter.Label(self.canvas_frame, bd=0, bg=Gui.palette.get("frame"), image=self.pdf_icon, cursor="hand2")
+		self.pdf.grid()
+		self.pdf.bind('<Button-1>',self.choose_file)
+		self.canvas_frame.bind('<Button-1>',self.choose_file)
+		
+		self.file_btn=tkinter.Button(self.root, text="Select Exam", height = 1, width = 20, borderwidth=3, command=self.choose_file,cursor="hand2")
+		self.file_btn.grid(row=0,column=1,pady=10,padx=(0,10),sticky="new")
+		
+		self.right_frame = tkinter.Frame(self.root,bg=Gui.palette.get("frame"),height=200)
+		self.right_frame.grid(row=1, column=1,sticky="news",padx=(0,10))
+		self.right_frame.columnconfigure(index=0, weight=2)
+		self.right_frame.columnconfigure(index=1, weight=1)
+		self.right_frame.rowconfigure(index=0, weight=1)
+		self.right_frame.propagate(False)
+		
+		stu_frame=tkinter.LabelFrame(self.right_frame,bg=Gui.palette.get("frame"),text="Student Names",fg=Gui.palette.get("lighttext"),labelanchor="n", relief="flat")
+		stu_frame.grid(padx=(10,5),pady=(10,10),row=0,column=0,sticky="nsew")
+		#stu_frame.grid_propagate(False)
+		stu_frame.rowconfigure(index=0,weight=1)
+		stu_frame.rowconfigure(index=1,weight=1)
+		
+		self.stu_names_box=tkinter.Text(stu_frame,width=30, height = 10, font=self.small_font, bg=Gui.palette.get("whitespace"),undo=True, relief="flat")
+		self.stu_names_box.pack(pady=10,fill="both",expand="yes")
+
+		ans_frame= tkinter.LabelFrame(self.right_frame,bg=Gui.palette.get("frame"),text="Answer Key",fg=Gui.palette.get("lighttext"),labelanchor="n", relief="flat")
+		ans_frame.grid(padx=(5,10),pady=10,row=0,column=1,sticky="nsew")
+		ans_frame.rowconfigure(index=0,weight=1)
+
+		self.ans_key_box=tkinter.Text(ans_frame,width=10, height=10, bg=Gui.palette.get("whitespace"),undo=True, relief="flat")
+		self.ans_key_box.pack(pady=(10,0),fill="both",expand="yes")
+
+		name_inst = tkinter.Label(stu_frame, wraplength=stu_frame.winfo_screenwidth()//7, bg=Gui.palette.get("frame"),text="Organize the names in the same order as the scans\nExample: \n    Tanner Moore \n    Emily Hunt\n    Foster Holmes\n    Bailey Alexander\n    ...",anchor="w", font=self.small_font,fg=Gui.palette.get("lighttext"),justify="left")
+		name_inst.pack(fill="both")
+		name_inst.bind("<Configure>",lambda e:name_inst.configure(wraplength=name_inst.winfo_width()))
+		
+		self.mark_frame = tkinter.Frame(self.root,bg=Gui.palette.get("bg"))
+		self.mark_frame.grid(row=2, column=1,pady=(10,10),padx=(0,10),sticky="ew")
+		self.mark_btn=tkinter.Button(self.mark_frame, text="Continue ►", height = 4, width = 20,borderwidth=3, command=lambda:load_inputs(self),state=tkinter.DISABLED,cursor="X_cursor")#
+
+		self.mark_btn.pack(padx=(0,5),side='left', fill="both", expand='yes')
+		tkinter.Label(self.mark_frame,bg = Gui.palette.get("bg"), image=self.icon).pack(side='top')
+		tkinter.Label(self.mark_frame, text=self.version, bg = Gui.palette.get("bg")).pack(side='bottom')
+
+	def parameters(self,params):
+		
+		self.next.set(False)
+		self.page = params.template
+		self.destroy_children(self.canvas)
+		self.destroy_children(self.right_frame)	
+		
+		img = PIL.Image.fromarray(params.template)
+		self.pil = img.copy()
+		img.thumbnail([600,848])
+		thumb = PIL.ImageTk.PhotoImage(img)
+		
+		self.canvas.img = thumb
+		self.canvas.create_image(0, 0, image=thumb, anchor=tkinter.NW)
+		self.canvas.config(cursor="crosshair")
+
+		self.box_frame = tkinter.LabelFrame(self.right_frame,text="Select the question area", relief="flat", labelanchor="n",fg=Gui.palette.get("lighttext"),bg=Gui.palette.get("frame"),bd=0,highlightthickness=0) #Hack to get nic border spacing
+		self.box_frame.grid(row=0,pady=10,padx=10,sticky="nsew")
+		self.box_frame.rowconfigure(index=0,weight=1)
+		self.box_frame.columnconfigure(index=0,weight=1)
+
+		def back():
+			self.home()
+			self.choose_file()
+
+		self.file_btn.config(text="Choose another file", command=back)
+
+		self.box_canvas = tkinter.Canvas(self.box_frame, bd=0 ,bg=Gui.palette.get("frame"), highlightthickness=0, relief='ridge')#,width=339,height=445)
+		
+		self.sel_anim_cnvs = tkinter.Canvas(self.box_frame, bg=Gui.palette.get("frame"), highlightthickness=0, bd=0,relief='ridge')#,width=321,height = 431,)
+		self.sel_anim_cnvs.grid(row=0,sticky="nsew") 
+		self.sel_anim_cnvs.create_image(175,215,image = self.sel_img, anchor=tkinter.CENTER)
+
+		self.hbar=tkinter.Scrollbar(self.box_frame,orient=tkinter.HORIZONTAL,width=12,bd=0,relief=tkinter.FLAT)
+		self.vbar=tkinter.Scrollbar(self.box_frame,orient=tkinter.VERTICAL,width=12,bd=0,relief=tkinter.FLAT)
+		self.hbar.config(command=self.box_canvas.xview)
+		self.vbar.config(command=self.box_canvas.yview)
+	
+		self.q_rect = self.Rectangle()
+		self.q_rect.rect = self.canvas.create_rectangle(0,0,0,0, dash=(50,), fill='', width=1, outline=Gui.palette.get("frame"))
+		self.canvas.bind('<Button-1>', self._q_mouse_posn)
+		self.canvas.bind('<B1-Motion>', self._q_sel_rect)
+		self.canvas.bind('<ButtonRelease-1>', self.q_area) 
+
+		self.box_rect = self.Rectangle()
+		self.box_rect.rect = self.box_canvas.create_rectangle(0,0,0,0,outline=Gui.palette.get("frame"),fill=Gui.palette.get("frame"))
+		self.listener = pynput.mouse.Listener(on_scroll=self.on_scroll)
+		self.box_canvas.bind('<Button-1>', self._box_mouse_posn)
+		self.box_canvas.bind('<B1-Motion>', self._box_sel_rect)
+		self.box_canvas.bind('<Enter>', self.start_listener)
+		self.box_canvas.bind('<Leave>', self.stop_listener)
+		self.box_canvas.bind('<ButtonRelease-1>', lambda _: self.mark_btn.config(state=tkinter.ACTIVE,cursor="hand2")) 		
+
+		self.mark_btn.configure(text="Mark Exams", state=tkinter.DISABLED, command=lambda: params.load_selection_boxes(self),cursor="X_cursor")
+		
+		self.anim_sel_box = self.sel_anim_cnvs.create_rectangle(0,0,0,0,dash=(50,), fill='', width=1, outline="#ffffff")
+		self.sel_anim_cnvs.after(100,self.selection_animation)
+
+	def marking(self):
+		self.destroy_children(self.root)
+		self.corrections_frame = tkinter.Frame(self.root,bd=0,bg=Gui.palette.get("frame"))
+		self.corrections_frame.grid(row=0,column=1, pady=10,padx=10,sticky="nsew")
+		self.corrections_frame.columnconfigure(index=0,weight=1)
+		self.corrections_frame.rowconfigure(index=0,weight=1,minsize=328)
+		self.anim_frame = tkinter.Frame(self.corrections_frame,bd=0,bg=Gui.palette.get("frame"))
+		self.anim_frame.grid(row=0,rowspan=3)
+
+		self.progress_frame = tkinter.Frame(self.root)
+		self.progress_frame.grid(row=1,column=1)
+		self.proc_canvas = tkinter.Canvas(self.progress_frame,relief='ridge')
+		self.proc_canvas.pack()
+		self.panels = []
+		self.prog_size =(max(68,min(100,round(900/len(self.thumbs))))-4,round(1.41*max(68,(min(100,900/len(self.thumbs))))))
+		for img, _ in self.thumbs:
+
+			img.thumbnail(self.prog_size)
+			thumb = PIL.ImageTk.PhotoImage(img)
+			panel = tkinter.Label(self.proc_canvas,bd=2)
+			panel.pack(side="left")
+			panel.config(image=thumb)
+			panel.image = thumb
+			self.panels.append(panel)
+			self.canvas.update()
+		self.make_anim_boxes(self.anim_frame)
+
+	def enter_corrections(self,image: PIL):
+		self.next.set(False)
+		# for item in self.buttons:
+		# 	button,response = item
+		# 	button.config(command=lambda response=response: self.button_cmd(response))
+		correction_image = PIL.ImageTk.PhotoImage(image = image)
+		self.correction_image_label.config(image=correction_image)
+		self.correction_image_label.grid()
+		self.corrections_frame.wait_variable(self.next)
+
+	def completed_page_panels(self,student):
+		if all(student.responses):
+			img = student.pil_output.resize(self.prog_size)
+			thumb = PIL.ImageTk.PhotoImage(img)
+			self.panels[student.index].config(image=thumb)
+			self.panels[student.index].image = thumb
+			self.panels[student.index].update()
+		else:
+			x, y = self.prog_size
+			temp,_ = self.thumbs[student.index].copy()
+			temp.paste(self.frames[-1],[x//2-16,y//2-15],self.frames[-1])
+			thumb = PIL.ImageTk.PhotoImage(temp)
+			self.panels[student.index].config(image=thumb)
+			self.panels[student.index].image = thumb
+			self.panels[student.index].update()
+
+	def create_corrections_gui(self,choices: int):
+		"""Brings up a GUI to manually choose the student's response"""	
+		
+		self.anim_bool.set(False)
+		self.next.set(False)
+
+
+		self.correction_image_label = tkinter.Label(self.corrections_frame,bd=0,bg=Gui.palette.get("frame"))
+		self.correction_image_label.grid(pady="10",padx="10",row=0,column=0,sticky="ew")
+		self.correction_buttons_frame=tkinter.Frame(self.corrections_frame,bg=Gui.palette.get("frame"))
+		self.correction_buttons_frame.grid(padx="5", row=1, sticky="nsew")
+		#self.buttons= []
+		for i in range(choices):
+			button=tkinter.Button(self.correction_buttons_frame, text=chr(i+65),cursor="hand2",command= lambda r=chr(i+65): self.button_cmd(r))
+			button.grid(padx=(5), pady=(0,10),column=i,row=1, sticky="NSEW")
+			self.correction_buttons_frame.columnconfigure(index=i,weight=1)
+			#self.buttons.append([button, chr(i+65)])
+
+		unclear_button=tkinter.Button(self.correction_buttons_frame, text="Unclear",cursor="hand2",command= lambda : self.button_cmd("Unclear"))
+		unclear_button.grid(padx=(5), pady=(0,10),row=2,column=0,columnspan=choices//2, sticky="NSEW")
+		blank_button = tkinter.Button(self.correction_buttons_frame, text="Blank",cursor="hand2", command= lambda: self.button_cmd("Blank"))
+		blank_button.grid(padx=(5), pady=(0,10),row=2,column=2,columnspan=choices//2, sticky="NSEW")
+		#self.buttons.append([unclear_button, "unclear"])
+		#self.buttons.append([blank_button, "Blank"])
+		
+		#for some unknow reason command= lambda : self.button_cmd("Unclear")) was executing immediately. So packed into a list and reassign on correction image loading 
+
+	def complete(self,students):
+		self.destroy_children(self.root)
+		self.canvas_frame = tkinter.Frame(self.root,bg=Gui.palette.get("frame"),bd=0, highlightthickness=0, relief='ridge')
+		self.canvas_frame.pack(padx="10", pady="10", side="right", fill="both")
+		self.canvas_frame.propagate(False)
+		path_to_save = self.filename.replace(".pdf","")
+		basename = os.path.basename(self.filename)
+		basename = basename.replace(".pdf","")
+		tkinter.Label(self.root, bg=Gui.palette.get("bg"), fg=Gui.palette.get("lighttext"), wraplength=300, text=f"Finished \n The results have been saved in \n {path_to_save}").pack(pady=20,padx =(10,0), fill="both")
+		tkinter.Button(self.root,text="Open results folder", command=lambda:os.startfile(path_to_save),cursor="hand2").pack(pady=5, padx =(10,0), fill="both")
+		tkinter.Button(self.root,text="Open marked pdf", command=lambda:os.startfile(f"{path_to_save}\\ChilliMark-{basename}.pdf",cursor="hand2")).pack(pady=5,padx =(10,0), fill="both")
+		tkinter.Button(self.root,text="Open stats", command=lambda:os.startfile(f"{path_to_save}\\{basename}.csv"),cursor="hand2").pack(pady=5,padx =(10,0), fill="both")
+		tkinter.Button(self.root,text="Mark Another Exam", command=self.home,cursor="hand2").pack(pady=5,padx =(10,0), fill="both")
+		tkinter.Label(self.root, bg=Gui.palette.get("bg"), image=self.icon).pack(side='bottom')
+		tkinter.Label(self.root, text=self.version, bg = Gui.palette.get("bg")).pack(side='bottom')
+		self.canvas = tkinter.Canvas(self.canvas_frame, bg=Gui.palette.get("frame"), bd=0, highlightthickness=0, relief='ridge')#height=705, width=520, 
+		self.canvas.grid(padx="10", pady="10", column=0,row=0, sticky="nsew")
+		self.canvas.propagate(False)
+		imgs = [student.pil_output for student in students]
+
+		thumbs= []
+		for img in imgs:
+			pil = img.copy()
+			pil.thumbnail(self.thumb_size)
+			thumb = PIL.ImageTk.PhotoImage(pil)
+			thumbs.append([pil,thumb])
+		self.thumb_grid(None,thumbs,imgs)
+		self.root.wait_window()
+
+	def	make_anim_boxes(self,frame):
+		self.anim_bool = tkinter.BooleanVar(value=True)
+		boxes = []
+		wide = self.corrections_frame.winfo_width()//90 -1
+		for i in range(wide*wide//2):
+			box = self.Anim_Box(frame,i,wide)
+			box.round()
+			boxes.append(box)	
+		random.shuffle(boxes)
+		self.animate_box(boxes)
+
+	def animate_box(self,boxes):
+		
+		box = boxes[-1]
+		box.time=time.time()
+		box.start=math.degrees(time.time())%360
+		box.canvas.itemconfig(box.cover,start = box.start)
+		box.swipe(boxes)
+		boxes.pop(-1)
+		self.corrections_frame.after(200,lambda:self.animate_box(boxes))
+	
+	def animate_page(self,queue):
+		if not self.anim_bool.get():
+			return
+		try: #since this is in a different thread it fails on last one
+			tup=queue.get(block=False)
+			index, frame = tup
+			temp,_ = self.thumbs[index].copy()
+			x, y = self.prog_size
+			temp.paste(self.frames[frame],[x//2-16,y//2-15],self.frames[frame])
+			thumb = PIL.ImageTk.PhotoImage(temp)
+			self.panels[index].config(image=thumb)
+			self.panels[index].image = thumb
+		except:
+			pass
+		self.progress_frame.after(100,lambda: self.animate_page(queue))
+
+	def _q_mouse_posn(self,event):
 		self.q_rect.x1, self.q_rect.y1 = event.x, event.y
 
-	def box_mouse_posn(self,event):
+	def _box_mouse_posn(self,event):
 		self.box_rect.x1, self.box_rect.y1 = event.x, event.y
 		self.box_rect.x1true, self.box_rect.y1true = self.box_canvas.canvasx(event.x), self.box_canvas.canvasy(event.y)
 
-	def q_sel_rect(self,event):
+	def _q_sel_rect(self,event):
 		self.q_rect.x2, self.q_rect.y2 = event.x, event.y
 		self.canvas.coords(self.q_rect.rect, self.q_rect.x1, self.q_rect.y1, self.q_rect.x2, self.q_rect.y2)  # Update selection rect.
 
-	def box_sel_rect(self,event):
+	def _box_sel_rect(self,event):
 		self.box_rect.x2, self.box_rect.y2 = event.x, event.y
 		self.box_rect.x2true, self.box_rect.y2true = self.box_canvas.canvasx(event.x), self.box_canvas.canvasy(event.y)
 		self.box_canvas.coords(self.box_rect.rect, 0,0,0,0)  # Update selection rect.
-		self.box_rect.rect = self.box_canvas.create_rectangle(self.box_rect.x1true, self.box_rect.y1true, self.box_rect.x2true, self.box_rect.y2true, dash=(50,), fill='', width=1, outline=self.palette.get("frame"))
-		
+		self.box_rect.rect = self.box_canvas.create_rectangle(self.box_rect.x1true, self.box_rect.y1true, self.box_rect.x2true, self.box_rect.y2true, dash=(50,), fill='', width=1, outline=Gui.palette.get("frame"))
+
 	def q_area(self,event):
+		
+		#Cleans up value of corners
 		x1 = max(0,(min(self.q_rect.x1,self.q_rect.x2)))
-		x2 = min(500,(max(self.q_rect.x1,self.q_rect.x2)))
+		x2 = min(600,(max(self.q_rect.x1,self.q_rect.x2)))
 		y1 = max(0,(min(self.q_rect.y1,self.q_rect.y2)))
-		y2 = min(705,(max(self.q_rect.y1,self.q_rect.y2)))
-		self.y1 = round(y1*6828/705)
-		self.x1 = round(x1*4800/500)
-		self.y2 = round(y2*6828/705)
-		self.x2 = round(x2*4800/500) 
+		y2 = min(848,(max(self.q_rect.y1,self.q_rect.y2)))
+
+		self.y1 = round(y1//8)
+		self.x1 = round(x1//8)
+		self.y2 = round(y2//8)
+		self.x2 = round(x2//8) 
+
 		self.image = PIL.ImageTk.PhotoImage(self.pil.crop([self.x1,self.y1,self.x2,self.y2]))
+		self.sel_anim_cnvs.destroy()
 		self.box_canvas.create_image(0, 0, image=self.image, anchor=tkinter.NW)
 		self.box_canvas.config(cursor="crosshair",scrollregion=[0,0,self.x2-self.x1,self.y2-self.y1], xscrollcommand = self.hbar.set, yscrollcommand = self.vbar.set)
-		self.vbar.grid(row=2,column=1,sticky="ns")
-		self.hbar.grid(row=3,column=0,sticky="ew")
-		self.int.config(text="Now select one empty box")
+		self.box_canvas.grid(pady=(10,0),row=0,sticky="nsew")
+		self.vbar.grid(row=0,column=1,sticky="ns",pady=(10,0))
+		self.hbar.grid(row=1,column=0,sticky="ew")
+		self.box_frame.config(text="Now select one empty box")
 
 	def start_listener(self,event):
 		if not self.listener.running:
@@ -123,187 +472,71 @@ class Gui:
 			self.listener.stop()
 
 	def on_scroll(self,x, y, dx, dy):
-		while dy>10 or dy<-10:
-			dy //= 10
-		while dx>10 or dx<-10:
-			dx //=10
-
+		while abs(dy)>5:
+			dy //= 5
+		while abs(dx>5):
+			dx //=5
 		self.box_canvas.xview_scroll(dx, "units")
 		self.box_canvas.yview_scroll(-dy, "units")
 
-	def home(self):
-		self.destroy_children(self.root)
-		self.pdf_icon = tksvg.SvgImage(file="icons\pdf.svg", scaletoheight = 256 )
-		self.canvas_frame = tkinter.Frame(self.root,bg=self.palette.get("frame"), height=725, width=520, bd=0, highlightthickness=0, relief='ridge')
-		self.canvas_frame.grid(padx="10", pady="10", column=0,row=0)
-		self.canvas_frame.columnconfigure(0, weight=1)
-		self.canvas_frame.rowconfigure(1, weight=1)
-		self.canvas_frame.grid_propagate(False)
-		self.pdf = tkinter.Label(self.canvas_frame, bg=self.palette.get("frame"), image=self.pdf_icon)
-		self.pdf.grid(row=1)
+	def selection_animation(self):
+		x = 50*math.sin(time.time())
+		self.sel_anim_cnvs.coords(self.anim_sel_box, 75,155,225+x,310+x)
+		self.sel_anim_cnvs.after(33,self.selection_animation)
 
-		#Drag and Drop Files
-		self.root.drop_target_register(tkinterdnd2.DND_FILES)
-		self.root.dnd_bind('<<Drop>>', lambda event: self.open_file(event.data))
+	def img_preview(self,event=None,index=None,imgs=None):
+		hidden = self.canvas.grid_slaves()
+		list(map(operator.methodcaller("grid_remove"), hidden))
+		temp = imgs[index].copy()
+		temp.thumbnail([600,848])
+		preview = PIL.ImageTk.PhotoImage(temp)
+		panel=tkinter.Label(self.canvas,image = preview,bd=0)
+		panel.image = preview
+		panel.grid()
+		def reload(event):
+			panel.destroy()
+			list(map(operator.methodcaller("grid"), hidden)) 
+		panel.bind("<Button-1>",reload)
 
-		self.right_frame = tkinter.Frame(self.root, bg=self.palette.get("bg"),height=725,width=523)
-		self.right_frame.grid(padx=(0,10), pady="10",column=1,row=0, sticky="nsew")
-		mark_frame = tkinter.Frame(self.right_frame, bg=self.palette.get("bg"))
-		mark_frame.pack(side="bottom", fill="x")
-		self.mark_btn=tkinter.Button(mark_frame, text="Mark Exams", height = 4, width = 20,borderwidth=3, command=load_inputs,state=tkinter.DISABLED)
-		self.mark_btn.pack(padx=(0,5),pady=(10,0), side='left', fill="both", expand='yes')
-		tkinter.Label(mark_frame, bg=self.palette.get("bg"), image=self.icon).pack(side='top')
-		tkinter.Label(mark_frame, text=self.version, bg = self.palette.get("bg")).pack(side='bottom')
-		entry_frame = tkinter.Frame(self.right_frame,bg=self.palette.get("frame"), height= 500)
-		entry_frame.pack(side = "bottom", fill="both", expand="yes")
-		entry_frame_ans= tkinter.Frame(entry_frame,bg=self.palette.get("frame"))
-		entry_frame_ans.pack(side="right", pady="10",fill="both", expand="yes")
-		entry_frame_stu= tkinter.Frame(entry_frame,bg=self.palette.get("frame"))
-		entry_frame_stu.pack(side="left", pady=10,padx=(10,0), fill="both", expand="yes")
-		tkinter.Label(entry_frame_ans,text="Answer Key",width=9,height = 1,anchor="w",bg=self.palette.get("frame"),fg=self.palette.get("lighttext")).pack(sid="top", pady="10")
-		self.ans_key_box=tkinter.Text(entry_frame_ans,width=10,height=2, bg=self.palette.get("whitespace"),undo=True)
-		self.ans_key_box.pack(padx = "10",fill="both",expand="yes")
-		tkinter.Label(entry_frame_stu, text="Student Names", height = 1, anchor="w",bg=self.palette.get("frame"),fg=self.palette.get("lighttext")).pack(side = "top", padx="10", pady="10")
-		tkinter.Label(entry_frame_stu,wraplength=190, bg=self.palette.get("frame"),text="Organize the names in the same order as the scans\nExample: \n    Tanner Moore \n    Emily Hunt\n    Foster Holmes\n    Bailey Alexander\n    ...",anchor="w", font=self.small_font,fg=self.palette.get("lighttext"),justify="left").pack(side="bottom", pady="10", anchor=tkinter.NW)
-		self.stu_names_box=tkinter.Text(entry_frame_stu,width=30,height=2,font=self.small_font, bg=self.palette.get("whitespace"),undo=True)
-		self.stu_names_box.pack(side = "top",fill="both",expand="yes")
-		self.file_btn=tkinter.Button(self.right_frame, text="Select Exam", height = 1, width = 20, borderwidth=3, command=self.choose_file)
-		self.file_btn.pack(side="bottom",pady=(0,10),fill="x")
-
-	def parameters(self,template):
-		self.page = template
+	def thumb_grid(self,event=None,thumbs=None,imgs=None):
 		self.destroy_children(self.canvas)
-		r_f_w = self.right_frame.winfo_width()-28
-		self.destroy_children(self.right_frame)	
-		img = PIL.Image.fromarray(template)
-		self.pil = img.copy()
-		img.thumbnail([500,705])
-		thumb = PIL.ImageTk.PhotoImage(img)
-		#panel = tkinter.Label (self.canvas, bg=self.palette.get("frame"))
-		#panel.grid(row=0, column=0)
-		self.canvas.img = thumb
-		self.canvas.create_image(0, 0, image=thumb, anchor=tkinter.NW)
-		self.canvas.config(cursor="crosshair")
-		self.box_frame = tkinter.Frame(self.right_frame,bg=self.palette.get("frame"))
-		self.box_frame.grid(sticky="nsew")
-		def back():
-			gui.home()
-			self.choose_file()
-		tkinter.Button(self.box_frame, text="Choose another file", borderwidth=3, command=back).grid()
-		self.int = tkinter.Label(self.box_frame,text="Select the question area", bg=self.palette.get("frame"),fg=self.palette.get("lighttext")) 
-		self.int.grid()
-		#tkinter.Button(self.right_frame, text="Select").grid()
-		self.box_canvas = tkinter.Canvas(self.box_frame,bd=0,bg=self.palette.get("frame"), highlightthickness=0, relief='ridge',width=r_f_w,height=470)
-		self.box_canvas.grid(row=2,column=0,sticky="nsew") 
-		self.hbar=tkinter.Scrollbar(self.box_frame,orient=tkinter.HORIZONTAL,width=12,bd=0,relief=tkinter.FLAT)
-		self.vbar=tkinter.Scrollbar(self.box_frame,orient=tkinter.VERTICAL,width=12,bd=0,relief=tkinter.FLAT)
-		self.hbar.config(command=self.box_canvas.xview)
-		self.vbar.config(command=self.box_canvas.yview)
-	
-		self.q_rect = self.Rectangle()
-		self.q_rect.rect = self.canvas.create_rectangle(0,0,0,0, dash=(50,), fill='', width=1, outline=self.palette.get("frame"))
-		self.canvas.bind('<Button-1>', self.q_mouse_posn)
-		self.canvas.bind('<B1-Motion>', self.q_sel_rect)
-		self.canvas.bind('<ButtonRelease-1>', self.q_area) 
-
-		self.box_rect = self.Rectangle()
-		self.box_rect.rect = self.box_canvas.create_rectangle(0,0,0,0)
-		#self.box_rect.rect = self.box_canvas.create_rectangle(self.box_rect.x1, self.box_rect.y1, self.box_rect.x2, self.box_rect.y2, dash=(50,), fill='', width=1, outline=self.palette.get("frame"))
-		#self.box_canvas.create_rectangle(100,100,200,200, dash=(50,), fill='#000000', width=1, outline=self.palette.get("frame"))
-		self.listener = pynput.mouse.Listener(on_scroll=self.on_scroll)
-		self.box_canvas.bind('<Button-1>', self.box_mouse_posn)
-		self.box_canvas.bind('<B1-Motion>', self.box_sel_rect)
-		self.box_canvas.bind('<Enter>', self.start_listener)
-		self.box_canvas.bind('<Leave>', self.stop_listener)
-		self.box_canvas.bind('<ButtonRelease-1>', lambda _: mark_btn.config(state=tkinter.ACTIVE)) 		
-		
-		mark_frame = tkinter.Frame(self.right_frame, bg=self.palette.get("bg"))
-		mark_frame.grid()
-		mark_btn=tkinter.Button(mark_frame, text="Mark Exams", height = 4, width = 20,borderwidth=3, state=tkinter.DISABLED, command=lambda: load_parameters(self,template))
-		mark_btn.pack(padx=(0,5),pady=(10,0), side='left', fill="both", expand='yes')
-		tkinter.Label(mark_frame, bg=self.palette.get("bg"), image=self.icon).pack(side='top')
-		tkinter.Label(mark_frame, text=self.version, bg = self.palette.get("bg")).pack(side='bottom')
-		self.root.wait_window()
-
-	def processing(self):
-
-		self.destroy_children(self.root)
-		self.progress_frame = tkinter.Frame(self.root)
-		tkinter.Label(self.root,text="Processing").grid()
-		#self.progress_frame.grid(row=1,sticky="ew")
-		self.corrections_frame = tkinter.Frame(self.root, bg=self.palette.get("frame"))
-		self.finished=tkinter.BooleanVar(gui.root,True)
-		self.corrections_frame.grid()
-		self.root.update()
-	
-
-
-
-
-	def complete(self):
-		global filename
-		
-
-
-		make_output()
-		self.destroy_children(self.root)
-		path_to_save = filename.replace(".pdf","")
-		tkinter.Label(self.root,text="Finished").pack()
-		tkinter.Button(self.root,text="Open output", command=lambda:os.startfile(path_to_save)).pack()
-		tkinter.Button(self.root,text="Mark Another Exam", command=self.home).pack()
-		self.root.wait_window()
-
-	def progress_bar(self,condition=None,frame=None):
-		bar = tkinter.ttk.Progressbar(frame, orient = tkinter.HORIZONTAL, length = 280, mode = 'indeterminate')
-		
-		bar.pack(side='top', pady = (0,10), fill="x")
-		while condition():
-			bar['value']+=10
-			self.wait.wait(0.1)
-			bar.update()
-		bar.destroy()
+		for i, item in enumerate(thumbs):
+			_,thumb = item
+			panel = tkinter.Label(self.canvas,image=thumb,cursor="hand2")
+			panel.grid(row=i//self.grid_size, column=i%self.grid_size)
+			panel.image = thumb
+			panel.bind("<Button-1>",lambda e=None,index=i:self.img_preview(e,index=index,imgs=imgs))
+			self.canvas.update()
 
 	def open_file(self,file: str):
-		global filename
 		if not file:
 			return
-		filename = file.strip("{,}")
+		self.thumbs=[]
+		self.filename = file.strip("{,}")
 		self.pdf.destroy()
 		#self.canvas_frame.children.clear()
-		self.canvas = tkinter.Canvas(self.canvas_frame, bg=self.palette.get("frame"), height=705, width=5, bd=0, highlightthickness=0, relief='ridge')
+		self.canvas = tkinter.Canvas(self.canvas_frame, bg=Gui.palette.get("frame"), height=848, width=600, bd=0, highlightthickness=0, relief='ridge')
 		self.canvas.grid(padx="10", pady="10", column=0,row=0, sticky="nsew")
-		doc = pymupdf.open(filename)
-		thumb_size, positions = self.thumb_grid(doc)
-		for i, page in enumerate(doc):
+		doc = pymupdf.open(self.filename)
+		self.grid_size = math.isqrt(len(doc))+1*(math.sqrt(len(doc))!=math.isqrt(len(doc)))
+		self.thumb_size = (600//self.grid_size-self.grid_size,848//self.grid_size-self.grid_size)
+		imgs = []
+		for page in doc:
 			pix = page.get_pixmap(dpi=72, colorspace="RGB")
 			img = PIL.Image.frombuffer("RGB", [pix.width, pix.height], pix.samples)  
-			img.thumbnail(thumb_size)
+			imgs.append(img.copy().resize((600,848)))
+			img.thumbnail(self.thumb_size)
 			thumb = PIL.ImageTk.PhotoImage(img)
-			panel = tkinter.Label (self.canvas)
-			panel.grid(row=positions[i][0], column=positions[i][1])
-			panel.config(image=thumb)
-			panel.image = thumb
-			self.root.update()
-		self.mark_btn.config(state=tkinter.ACTIVE)
+			self.thumbs.append([img,thumb])
+		self.thumb_grid(None,self.thumbs,imgs)
+		self.mark_btn.config(state=tkinter.ACTIVE,cursor="hand2")
 
-	def thumb_grid(self,doc):
-		grid_size = math.isqrt(len(doc))+1*(math.sqrt(len(doc))!=math.isqrt(len(doc)))
-		thumb_size = (500//grid_size-4,705//grid_size-4)
-		positions = []
-		c=0
-		r=0
-		while r < grid_size:  			#turn shorter logic
-			while c < grid_size:
-				positions.append([r,c])
-				c+=1
-			c=0
-			r+=1
-		return thumb_size ,positions
-
-	def choose_file(self):
-		global filename
+	def choose_file(self,event=None):
 		filename = tkinter.filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
-		self.open_file(filename)
+		if filename == "":
+			return
+		self.filename = filename
+		self.open_file(self.filename)
 
 	def destroy_children(self,parent):
 		for child in parent.winfo_children():
@@ -311,8 +544,13 @@ class Gui:
 				self.destroy_children(child)
 			child.destroy()
 
+	def button_cmd(self,response):
+		self.response.set(response)
+		self.correction_image_label.grid_remove()
+		self.next.set(True)
+
 class Parameters:
-	def __init__(self,rect,key_input):
+	def __init__(self,rect,key,names,template):
 		self.rect = rect
 		self.y1	= 0
 		self.x1	= 0
@@ -329,12 +567,23 @@ class Parameters:
 		self.text_shift = []
 		self.font_size = 0 #maybe shift this to markup class
 		self.fill_limit = 0
-		self.set_key(key_input)
-	
+		self.set_key(key)
+		self.template = template
+		self.names = names
+
 	def set_box(self,image):
 		image = get_thresh(image[int(self.box_y1):int(self.box_y2),int(self.box_x1):int(self.box_x2)],blur=True)
 		outer, _ = cv2.findContours(image,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 		outer=outer[0]
+		#if area(outer)
+		percentage = abs(area(outer)-((self.box_y2-self.box_y1)*(self.box_x2-self.box_x1)))/area(outer)
+		
+		if percentage>100:
+			raise Exception("Your selection does return a complete box")
+		if percentage>0.35:
+			print(percentage)
+		
+		
 		outer = cv2.approxPolyDP(outer, 0.05*cv2.arcLength(outer, True), True)		
 		x, y, w, h = cv2.boundingRect(outer)#not the most elegant
 		image = cv2.bitwise_not(image)
@@ -374,49 +623,94 @@ class Parameters:
 		if key_input:
 			self.score_size = cv2.getTextSize(f"Score =  {len(self.key)} / {len(self.key)}",cv2.FONT_HERSHEY_SIMPLEX, 5,7)[0]
 
+	def load_selection_boxes(self, gui: Gui):
+		"""Loads the selection box co-ordinates from gui"""
+		
+		self.y1 = int(gui.y1)
+		self.x1 = int(gui.x1)
+		self.y2 = int(gui.y2)
+		self.x2 = int(gui.x2)
+
+		self.box_y1 = int(gui.box_rect.y1true+self.y1)
+		self.box_x1 = int(gui.box_rect.x1true+self.x1)
+		self.box_y2 = int(gui.box_rect.y2true+self.y1)
+		self.box_x2 = int(gui.box_rect.x2true+self.x1)
+
+		try: 
+			self.set_box(self.template)
+			self.set_markup_size()
+		except:
+			tkinter.messagebox.showinfo(message="Please try selecting the box again")
+			return
+		return core(gui,self)
+
 class Student:
 
 	colour = {"red": (200,0,0),"yellow": (250,170,0),"green": (0,170,0)}
 
-	def __init__(self,filename,i,params):
-		self.name = f"Student {i+1:0{params.num}}"
-		self.num = i+1
+	def __init__(self,filename,i,params,queue):
+		self.name: str = f"Student {i+1:0{params.num}}"
+		self.index: int = i 
 		self.scan = None
 		self.responses = None
-		self.questions = []
-		self.score = 0
+		self.questions: list = []
+		self.incomplete: list = []
+		self.score: int = 0
+		self.queue = queue
+		self.frame = 0
 		self.process_page(filename,i,params)
 		self.mark(params)
-	
-	def process_page(self,filename,i,params):
-		doc = pymupdf.open(filename)
-		pix = doc[i].get_pixmap(dpi=600, colorspace="RGB")
-		image = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
-		image,rect= rotation(image)
-		image= scale(image,rect,params)
-		self.scan=image
-		self.pil_original = PIL.Image.fromarray(self.scan[:,:,::1])
 
+	def animation_step(self):
+		self.queue.put( [self.index,self.frame])
+		self.frame+= 1
+	
+	def process_page(self,filename: str,i: int,params: Parameters):
+		#doesn't seem to affect performance. can change it so that it animate in chunks of 4
+		#or just have non-progress tied looping animations 
+		self.animation_step() 
+		doc = pymupdf.open(filename)
+		self.animation_step()
+		pix = doc[i].get_pixmap(dpi=600, colorspace="RGB")
+		self.animation_step()
+		image = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
+		self.animation_step()
+		image,rect= rotation(image)
+		self.animation_step()
+		image= scale(image,rect,params)
+		self.animation_step()
+		self.scan=image
+		self.animation_step()
+		self.pil_original = PIL.Image.fromarray(self.scan)
+		self.animation_step()
 
 	def mark(self,params):
 		"""Identifies the boxes, and if they have been filled. Then annotates the images"""
+		self.animation_step()
 		q_area = self.scan[params.y1:params.y2,params.x1:params.x2]
+		self.animation_step()
 		boxes = find_boxes(q_area,params)
 		columns = sort_into_columns(boxes,params)
 		sort_into_rows(boxes,params)
+		self.animation_step()
 		missing(columns,params)
 		self.questions = find_questions(columns,params)
 		find_responses(self,q_area,params)
+		self.animation_step()
 		self.responses = [question.response for question in self.questions]
 		if params.key:
 			self.add_markup(q_area,params)
 		q_area = self.annotate(params,q_area)
+		self.animation_step()
 		self.scan[params.y1:params.y2,params.x1:params.x2] = q_area
 		self.scan=cv2.putText(self.scan,self.name,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(255,255,255),25)
+		self.animation_step()
 		self.scan=cv2.putText(self.scan,self.name,(512,512),cv2.FONT_HERSHEY_DUPLEX,6,(0,0,0),10)
-		self.scan = cv2.cvtColor(self.scan,cv2.COLOR_BGR2RGB)		
+		self.scan = cv2.cvtColor(self.scan,cv2.COLOR_BGR2RGB)	
+		self.animation_step()
 		self.scan[256:512,4288:4544]=cv2.imread("icons\printmark.png")
 		self.pil_output = PIL.Image.fromarray(self.scan[:,:,::-1])		
+		self.animation_step()
 		#dont know what the [:,:,::-1] is for
 		return self
 
@@ -446,165 +740,114 @@ class Student:
 			self.scan= cv2.putText(self.scan,f"Score = {self.score} / {len(params.key)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)		
 		return image
 
-class Question:
+def corrections(students: list, gui: Gui, params: Parameters):
+	"""Looks through list of students responses with unclear answers,
+	Brings up a gui with the question and asks the marker to assign the respose."""
 	
-	colour = {"red": (0,0,200),"yellow": (0,170,250),"green": (0,170,0)}
-	
-	def __init__(self,r):
-		self.response = "Blank"
-		self.boxes = []
-		self.response_box = None
-		self.number = r
-	
-	def get_response(self):
-		for box in self.boxes:
-			if box.bool:
-				self.response=box.letter
-				self.response_box=box
-				box.colour = "red"
-	
-	def annotate(self,params,image,colour=colour): 
-		#the logic of the two annotate functions is slightly different. 
-		# This time we do no want to skip unclear. 
-		# We are also avoiding a later RGB colour flip
-		
-		if self.response =="Blank":
-			print("if",self.response)
-			return
-		for box in self.boxes:
-			print("else",self.response)
-			if box.bool:
-				cv2.drawContours(image, [box.xy+params.outer], -1, colour.get(box.colour), 5,cv2.LINE_AA)
+	for student in students:
+		gui.completed_page_panels(student)	
+	gui.create_corrections_gui(len(students[0].questions[0].boxes))#get a nicer war to manage choices
 
-class Box:
-	def __init__(self,xy,q,i):
-		self.xy = xy
-		# self.question = q #r
-		# self.num = i #c
-		self.letter = chr(i+65)
-		self.colour = None
-		self.bool = False
-	
-	def fill(self,params,thresh):
-		contour = params.inner + self.xy
-		x,y,w,h= cv2.boundingRect(contour)
-		temp = thresh[y:y+h,x:x+w]
-		mask = numpy.zeros(temp.shape, dtype="uint8") 
-		mask = cv2.bitwise_and(temp, temp, mask)
-		if cv2.countNonZero(mask) > params.fill_limit:
-			self.bool = True
-			self.colour = "yellow"
+	incomplete = [student for student in students if not all(student.responses)]
 
-def page_to_image(filename,i,params):
-	doc = pymupdf.open(filename)
-	pix = doc[i].get_pixmap(dpi=600, colorspace="RGB")
-	image = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
-	image,rect= rotation(image)
-	image= scale(image,rect,params)
-	return image
-
-def load_parameters(gui,template):
-	global params
-
-	params.y1 = gui.y1  #assign directly in gui?
-	params.x1 = gui.x1
-	params.y2 = gui.y2
-	params.x2 = gui.x2
-	
-	params.box_y1 = gui.box_rect.y1true+params.y1
-	params.box_x1 = gui.box_rect.x1true+params.x1
-	params.box_y2 = gui.box_rect.y2true+params.y1
-	params.box_x2 = gui.box_rect.x2true+params.x1
-	
-	if params.set_box(template)==False:
-		tkinter.messagebox.showinfo(message="Choose another box")
-		gui.parameters(template)
-	
-	params.set_markup_size()
-	gui.processing()
-	core()
-
-
-
-
-
-def core():
-	global names_input, filename, params, students
-	doc = pymupdf.open(filename) #probably unecessary. remove after getting the returning of image correct
-	params.num = len(doc)//10+1
-	
-	pages=[[filename,i,params] for i,_ in enumerate(doc)] #creating tuples to pass to the parallel processing function since it cannot take the page object
-	
-
-	pool = multiprocessing.Pool(multiprocessing.cpu_count()*2) 
-	students = pool.starmap(Student,pages)
-
-	for student in students: #create a sublist or tag instead"
-
-		if all(student.responses):
-			continue
-		q_area = student.scan[params.y1:params.y2,params.x1:params.x2]
-		for question in student.questions:
-			if question.response:
-				continue
-			corrections(question,student.pil_original)
+	for student in incomplete:
+		for question in student.incomplete:
+			centres = [box.xy for box in question.boxes]
+			qx,qy = (centres[0][0]+centres[-1][0])//2, (centres[0][1]+centres[-1][1])//2
+			x1 = qx-435+params.x1
+			y1 = qy-155+params.y1
+			x2 = qx+435+params.x1
+			y2 = qy+158+params.y1
+			unclear = student.pil_original.crop([x1,y1,x2,y2])
+			gui.enter_corrections(unclear)
+			#while not gui.next_correction.get():
+				#continue
+			question.response = gui.response.get()
+			#print("coregui",gui.response.get())
+			#print("student",question.response)
+			if len(question.response)==1:
+				question.boxes[ord(question.response)-65].colour = "red"
+				question.boxes[ord(question.response)-65].bool = True
+				question.response_box = question.boxes[ord(question.response)-65]
 			student.responses[question.number]=question.response
-			if not params.key:
-				pass
-			elif question.response == params.key[question.number]:
-				question.response_box.colour="green"
-				student.score+=1
-			question.annotate(params,q_area)
+			if params.key:
+				if question.response == params.key[question.number]:
+					question.response_box.colour="green"
+					student.score+=1
+			#Zgui.next.set(True)
+		threading.Thread(target=correction_update, args=[student,gui,params]).start()
 
-		if params.key:
-			student.scan = cv2.putText(student.scan,f"Score = {student.score} / {len(params.key)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA)
-			student.scan= cv2.putText(student.scan,f"Score = {student.score} / {len(params.key)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)		
+def correction_update(student: Student,gui: Gui,params:Parameters):
+	q_area = student.scan[params.y1:params.y2,params.x1:params.x2]
+	for question in student.incomplete:
+		question.annotate(params,q_area)
+	if params.key:
+		student.scan = cv2.putText(student.scan,f"Score = {student.score} / {len(params.key)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA)
+		student.scan= cv2.putText(student.scan,f"Score = {student.score} / {len(params.key)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)
+	student.scan[params.y1:params.y2,params.x1:params.x2] = q_area
+	student.pil_output = PIL.Image.fromarray(student.scan[:,:,::-1])
+	try: #gui will have moved onto complete for final image if this was last
+		gui.completed_page_panels(student)
+	except:
+		pass
+
+def core(gui: Gui,params: Parameters):
+	doc = pymupdf.open(gui.filename) #probably unecessary. remove after getting the returning of image correct
+	params.num = len(doc)//10+1
+	manager = multiprocessing.Manager()
+	queue = manager.Queue()
+
+	#creating tuples to pass to the parallel processing function since it cannot take the page object
+	pages=[[gui.filename,i,params,queue] for i,_ in enumerate(doc)] 
+	pool = multiprocessing.Pool(len(doc)) 
+	students_async = pool.starmap_async(Student,pages)
+	gui.marking()	
+
+
+	def getting():
+		students = students_async.get()
+		corrections(students,gui,params)
+		make_output(students,gui,params)
+		gui.complete(students)
+
+	get_thread = threading.Thread(target=getting)
+	anim_thread = threading.Thread(target=lambda: gui.animate_page(queue), daemon=True)
+	anim_thread.start()
+	get_thread.start()
+
 		
-		
-		student.scan[params.y1:params.y2,params.x1:params.x2] = q_area
-		student.pil_output = PIL.Image.fromarray(student.scan[:,:,::-1])	
-				
-			# for box in question.boxes:
-			# 	if box.bool:
-			# 		cv2.drawContours(student.scan, [box.xy+params.outer], -1, colour.get(box.colour), 5,cv2.LINE_AA)
 
 
-	make_output()
-	gui.complete()
-
-
-	
-def load_inputs():
+def load_inputs(gui):
 	"""Select the question regions and an example box. 
 	Multiple other important parameters are defined based on this"""
 	
-	global filename, gui, params, template, names_input
-	
-	names_input=gui.stu_names_box.get(1.0, "end-1c")
 	key_input=gui.ans_key_box.get(1.0, "end-1c")
-	if filename == None:
+	names_input=gui.stu_names_box.get(1.0, "end-1c")
+	if gui.filename == None:
 		tkinter.messagebox.showinfo(title="No file", message= "Please select a file")
 		return
 	elif not key_input or not names_input:
 		if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered either the Student Names or Answer Key. \nAre you sure you want to continue?"):
 			return
-	
-	doc = pymupdf.open(filename)
+
+	doc = pymupdf.open(gui.filename)
 	pix = doc[0].get_pixmap(dpi=600, colorspace="RGB")
 	template = numpy.frombuffer(buffer=pix.samples, dtype=numpy.uint8).reshape((pix.height, pix.width, -1))
-	template = cv2.resize(template,(4800,6828))
+	template = cv2.resize(template,(4800,6784))
 	template,rect = rotation(template)
-	params = Parameters(rect,key_input)
-	
-	gui.parameters(template)
+	params = Parameters(rect,key_input,names_input,template)
+	params.filename = gui.filename
+	gui.parameters(params)
 
-def largest_cnt(image):
+
+def largest_cnt(image:cv2.typing.MatLike) -> cv2.typing.MatLike:
 	"""Find the largest contour on the page for use with alignment functions. 
 	Note that it draws a border on the image to eliminate false contours from scan edges."""
 
 	gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
 	thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV| cv2.THRESH_OTSU)[1] 
-	thresh = cv2.rectangle(thresh,(0,0),(4800,6828),0,200)
+	thresh = cv2.rectangle(thresh,(0,0),(4800,6784),0,200)
 	cnts,_ = cv2.findContours(thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 	filtered = filter(lambda cnt: area(cnt)>4000000,cnts)
 	sorted_cnts = sorted(filtered, key=area, reverse=True)
@@ -612,10 +855,10 @@ def largest_cnt(image):
 	largest = cv2.approxPolyDP(largest, 0.01*cv2.arcLength(largest, True), True)
 	return largest
 
-def rotation(page):
-	"""Assumes the largest contour is a box. 
-	Finds the rotation of largest contour and rotates the page based on that. 
-	Also returns key info about the largest for use in future scaling"""
+def rotation(page: cv2.typing.MatLike) -> cv2.typing.MatLike:
+	"""Assumes the largest contour is a rectangle. 
+	Finds the rotation of largest rectangle and rotates the page based on that. 
+	Also returns the largest rectangle for use in future scaling"""
 	
 	big=largest_cnt(page)
 	rect = cv2.minAreaRect(big)
@@ -624,24 +867,25 @@ def rotation(page):
 	else: 
 		angle = rect[2]
 	Matrix = cv2.getRotationMatrix2D((2400,3414),angle,1)
-	rotated = cv2.warpAffine(page, Matrix, (4800, 6828))
+	rotated = cv2.warpAffine(page, Matrix, (4800, 6784))
 	big=largest_cnt(rotated)
 	rx,ry,rh,rw = cv2.boundingRect(big)	
 	rect = [rx,ry,rh,rw]				#Getting the dimension of this key contour is handled here rather than a separate function
 	return rotated, rect
 
-def scale(image,rect,params):
-	"""Resizes the the page both up or down so that the largest contour matches the size of the key largest contour."""
+def scale(image:cv2.typing.MatLike,rect: list,params: Parameters) -> cv2.typing.MatLike:
+	"""Resizes the the page both up or down so that the largest contour matches 
+	the size of the template largest contour."""
 	
+	#needs to actually determine each side seperately
+
 	scale_x = params.rect[2]/rect[2]
 	scale_y = params.rect[3]/rect[3]
 	rx,ry,_,_ = params.rect	
 	sx = round(rect[0]*scale_x)
 	sy = round(rect[1]*scale_y)
-	image = cv2.resize(image,(round(4800*scale_x),round(6828*scale_y)))
+	image = cv2.resize(image,(round(4800*scale_x),round(6784*scale_y)))
 	height, width, _ = image.shape
-
-
 
 	if sx<rx:
 		diff_x=4800-width+(rx-sx)
@@ -650,43 +894,13 @@ def scale(image,rect,params):
 	else:
 		image = image[0:height,sx-rx:sx-rx+4800]
 	if sy<ry:
-		diff_y=6828-height+(ry-sy)
+		diff_y=6784-height+(ry-sy)
 		print("ydirection",ry-sy,diff_y,height)
 		image = cv2.copyMakeBorder(image,ry-sy,max(0,diff_y),0,0,cv2.BORDER_CONSTANT, value=(255,255,255))	
-			
 	else:
-		image = image[sy-ry:sy-ry+6828,0:width]
+		image = image[sy-ry:sy-ry+6784,0:width]
 
 	return image
-
-def select_area(image, instructions="Select Area",blur=False):
-	"Select the area to find contours."
-	
-	if blur:
-		image = cv2.GaussianBlur(image,(19,19),3) 
-
-	height, width, _ = image.shape
-	scale = height/705
-	width = int(width/scale)
-	height = 705
-
-	image = cv2.resize(image, (width,height)) 
-	cv2.putText(image,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(255, 255, 255),10,lineType=cv2.LINE_AA) 
-	cv2.putText(image,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(1, 1, 1),2,lineType=cv2.LINE_AA) 
-	cv2.putText(image,instructions, (50,75),cv2.FONT_HERSHEY_TRIPLEX, 1,(21, 21, 140),1,lineType=cv2.LINE_AA) 
-	x,y,w,h = cv2.selectROI(instructions, image)
-	cv2.namedWindow(instructions)
-	cv2.setWindowProperty(instructions, cv2.WND_PROP_TOPMOST, 1)
-	cv2.destroyAllWindows()
-	if not x:
-		return
-
-	x1= int((x-3)*scale) 
-	y1= int((y-3)*scale) 
-	x2= int((w+6)*scale) + x1
-	y2= int((h+6)*scale) + y1
-
-	return y1,x1,y2,x2
 
 def get_thresh(image,blur=True):
 	if blur:
@@ -771,7 +985,7 @@ def slice_messy(q_area,e_cnt,params,x,y,w,h,boxes):
 		if params.w*0.5 <= sw <= params.w*1.5 and params.h*0.5 <= sh <= params.h*1.5:
 			boxes.append(contour_center(s_cnt))
 
-def sort_into_columns(boxes,params=None):
+def sort_into_columns(boxes,params: Parameters):
 	"""Sorts them from left to right. 
 	Then if the gap between the left side of a box is more than half the width of a box of the previous it makes a new column
 	Columns are then sorted from top to bottom"""
@@ -856,7 +1070,7 @@ def missing(columns,params):
 		offset=0
 		for r, row in enumerate(column):
 			x,y = row
-			#print(abs(y-params.row_avg[r+offset]),int(params.y_jump-20))
+
 			if 20<abs(y-params.row_avg[r+offset])<int(params.y_jump-20):
 				columns[c].pop(r+offset)
 				offset-=1
@@ -879,15 +1093,15 @@ def find_questions(columns,params):
 	for r,row in enumerate(stack[0]):
 		question = Question(r)
 		for c,column in enumerate(stack):
-			box = Box(column[r],r,c)
+			box = Question.Box(column[r],c)
 			question.boxes.append(box)
 		questions.append(question)
 	return questions
 
-def find_responses(student,image,params):
+def find_responses(student: Student,image,params: Parameters):
 
-	student.choices = params.choices   #a quick hack to get around globals and how multiprocessing means params no longer take ypdatedinfoinfo
-	student.y_jump = params.choices
+	student.choices = params.choices   
+	student.y_jump = params.y_jump
 	student.w = params.w
 
 	thresh = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -901,18 +1115,19 @@ def find_responses(student,image,params):
 			if box.bool:
 				filled+=1
 		if filled > 1:			
-			question.response = False			
+			question.response = False		
+			student.incomplete.append(question)	
 		else:
 			question.get_response()
 
-def make_output():
-	global names_input, filename, params, students
-	#too many parts with too many jobs. should also come later in code sequence
 
-	names(names_input,students)
-	basename = os.path.basename(filename)
+def make_output(students: list,gui: Gui,params: Parameters):
+	#too many parts with too many jobs. should also come later in code sequence
+	
+	names(params.names,students)
+	basename = os.path.basename(gui.filename)
 	basename = basename.replace(".pdf","")
-	path_to_save = filename.replace(".pdf","")	
+	path_to_save = gui.filename.replace(".pdf","")	
 	if not(os.path.exists(path_to_save) and os.path.isdir(path_to_save)):
 		os.mkdir(path_to_save)
 	make_pdf(basename,path_to_save,students)
@@ -976,55 +1191,19 @@ def names(names_input,students):
 		for i, name in enumerate(names_input):
 			students[i].name = name.rstrip(", ") if name else students[i].name
 
-def corrections(question,image):
-	"""Brings up a GUI to manually choose the student's response"""	
-	
-	global gui
-	#definitly turn into method in class
-	gui.finished.set(False)
-	centres = [box.xy for box in question.boxes]
-	qx,qy = (centres[0][0]+centres[-1][0])//2, (centres[0][1]+centres[-1][1])//2
-	x1 = qx-435+gui.x1
-	y1 = qy-150+gui.y1
-	x2 = qx+435+gui.x1
-	y2 = qy+150+gui.y1
-	unclear = image.crop([x1,y1,x2,y2])
-	imgtk = PIL.ImageTk.PhotoImage(image = unclear)
-	def button(response="Unclear",question=question, choose=gui.corrections_frame):
-		if type(response)==str:
-			question.response = response
-		else:
-			question.response = chr(response+65)
-			question.boxes[response].colour = "red"
-			question.boxes[response].bool = True
-			question.response_box = question.boxes[response]
-		print(question.response)
-		gui.destroy_children(gui.corrections_frame)
-		gui.finished.set(True)
-		return
-	span=len(question.boxes)
-	tkinter.Label(gui.corrections_frame, image=imgtk).grid(padx="10", pady="10",row=0)#,column=0,columnspan=span)
-	frame=tkinter.Frame(gui.corrections_frame,bg="#8c1529")
-	frame.grid(padx="5", row=1, sticky="nsew")
-	for i in range(span):
-		tkinter.Button(frame, text=chr(i+65), command=lambda i=i: button(i)).grid(padx=(5), pady=(0,10),column=i,row=1, sticky="NSEW")
-		frame.columnconfigure(index=i,weight=1)
-	tkinter.Button(frame, text="Unclear", command=lambda: button("Unclear")).grid(padx=(5), pady=(0,10),row=2,column=0,columnspan=span//2, sticky="NSEW")
-	tkinter.Button(frame, text="Blank", command=lambda: button("Blank")).grid(padx=(5), pady=(0,10),row=2,column=2,columnspan=span//2, sticky="NSEW")
-	gui.root.wait_variable(gui.finished)
-
 def area(n):
 	_,_,w,h = cv2.boundingRect(n)
 	return h*w
 
-
 def main():
-	global filename, gui
-	filename = None
-	
+
 	gui = Gui()
 	ctypes.windll.shcore.SetProcessDpiAwareness(1)
 	gui.home()
+	#core(gui,params)
+	#gui.processing()
+	#gui.complete()
+	#gui.box_canvas.after(10,gui.selection_animation())	
 	gui.root.mainloop()
 
 if __name__ == '__main__':
