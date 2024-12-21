@@ -26,10 +26,11 @@ def progress_bar(condition=None):
     bar.destroy()
 
 def thumb_grid(doc):
-    grid_size = 1
-    
+    #grid_size = 1
     grid_size = math.isqrt(len(doc))+1*(math.sqrt(len(doc))!=math.isqrt(len(doc)))
-    thumb_size = (500//grid_size-1,705/grid_size)
+    #print(grid_size)
+    thumb_size = (500//grid_size-4,705//grid_size-4)
+    #print(thumb_size)
     positions = []
     c=0
     r=0
@@ -54,9 +55,8 @@ def open_file(filename):
     thumb_size, positions = thumb_grid(doc)
     
     for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=50, colorspace="RGB")
+        pix = page.get_pixmap(dpi=72, colorspace="RGB")
         img = PIL.Image.frombuffer("RGB", [pix.width, pix.height], pix.samples)  
-        
         img.thumbnail(thumb_size)
         thumb = PIL.ImageTk.PhotoImage(img)
         panel = tkinter.Label (canvas)
@@ -64,8 +64,8 @@ def open_file(filename):
         panel.config(image=thumb)
         panel.image = thumb
     
-    global first_page
-    first_page = chillimark.first_page(filename)#sneaky workaround to avoid loading time of first page.
+    global first_scan
+    first_scan = chillimark.first(filename)#sneaky workaround to avoid loading time of first page.
     return
 
 def choose_file():
@@ -81,7 +81,7 @@ def choose_file():
 def mark_exam():
     key_input=ans_key_box.get(1.0, "end-1c")
     names_input=stu_names_box.get(1.0, "end-1c")
-    print(threading.activeCount())
+    #print(threading.activeCount())
     if filename == None:
         tkinter.messagebox.showinfo(title="No file", message= "Please select a file")
         return
@@ -89,79 +89,95 @@ def mark_exam():
         if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered either the Student Names or Answer Key. \nAre you sure you want to continue?"):
             return
     
-    chillimark.main(filename,key_input,names_input,first_page)
+    chillimark.main(filename,key_input,names_input,first_scan)
     path_to_save = filename.replace(".pdf","")
     os.startfile(path_to_save)
 
+def main():
+    global filename
+    filename = None
+    windll.shcore.SetProcessDpiAwareness(1)
 
-global filename
-filename = None
+    gui_root()
 
-root = tkinter.Tk()
-windll.shcore.SetProcessDpiAwareness(1)
-icon = PIL.ImageTk.PhotoImage(file="icons\Icon128.png")
-version = ["v0.8","Capsaicin"]
-#version = ["v1.0","Adjuma"]
+def gui_process():
 
-root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="icons\Icon16.ico"))
-root.title("Chilli Marker")
-palette = {
-    "darktext" : "#280e0d",
-    "frame" : "#571622",
-    "whitespace" : "#e3e5ef",
-    "lighttext" : "#e3e5ef",
-    "bg": "#8c1529",
-    "button": "#b1a1a4",
-    "prog_bar":"#00713e"}
+    process_gui = tkinter.Tk()
+    process_gui.mainloop()
 
-root.configure(bg=palette.get("bg"), borderwidth=2)
 
-root.geometry("920x750")
-root.resizable(False, False)
-default_font = tkinter.font.nametofont("TkDefaultFont")
-small_font=default_font.copy()
-default_font.configure(size=14, weight="bold")
-small_font.configure(size=10)
-root.option_add("*Font", default_font)
-root.columnconfigure(0, weight=1)
-root.rowconfigure(1, weight=1)
+def gui_root():
+    
+    root = tkinter.Tk()
+    icon = PIL.ImageTk.PhotoImage(file="icons\Icon128.png")
+    version = ["v0.9","Capsaicin"]
+    #version = ["v1.0","Adjuma"]
+    root.tk.call('wm', 'iconphoto', root._w, PIL.ImageTk.PhotoImage(file="icons\Icon16.ico"))
+    root.title("Chilli Marker")
+    global palette
+    palette = {
+        "darktext" : "#280e0d",
+        "frame" : "#571622",
+        "whitespace" : "#e3e5ef",
+        "lighttext" : "#e3e5ef",
+        "bg": "#8c1529",
+        "button": "#b1a1a4",
+        "prog_bar":"#00713e"}
 
-canvas_frame = tkinter.Frame(root,bg=palette.get("frame"), height=725, width=523, bd=0, highlightthickness=0, relief='ridge')
-canvas_frame.grid(padx="10", pady="10", column=0,row=0)
-canvas_frame.columnconfigure(0, weight=1)
-canvas_frame.rowconfigure(1, weight=1)
-canvas_frame.grid_propagate(False)
+    root.configure(bg=palette.get("bg"), borderwidth=2)
 
-btn_frame = tkinter.Frame(root, bg=palette.get("bg"),height=725,width=523)
-btn_frame.grid(padx=(0,10), pady="10",column=1,row=0, sticky="nsew")
+    root.geometry("920x750")
+    root.resizable(False, False)
+    default_font = tkinter.font.nametofont("TkDefaultFont")
+    small_font=default_font.copy()
+    default_font.configure(size=14, weight="bold")
+    small_font.configure(size=10)
+    root.option_add("*Font", default_font)
+    root.columnconfigure(0, weight=1)
+    root.rowconfigure(1, weight=1)
 
-mark_frame = tkinter.Frame(btn_frame, bg=palette.get("bg"))
-mark_frame.pack(side="bottom", fill="x")
-mark_btn=tkinter.Button(mark_frame, text="Mark Exams", height = 4, width = 20,borderwidth=3, command=mark_exam)
-mark_btn.pack(padx=(0,5),pady=(10,0), side='left', fill="both", expand='yes')
-tkinter.Label(mark_frame, bg=palette.get("bg"), image=icon).pack(side='top')
-tkinter.Label(mark_frame, text=version, bg = palette.get("bg")).pack(side='bottom')
+    global canvas_frame
+    canvas_frame = tkinter.Frame(root,bg=palette.get("frame"), height=725, width=520, bd=0, highlightthickness=0, relief='ridge')
+    canvas_frame.grid(padx="10", pady="10", column=0,row=0)
+    canvas_frame.columnconfigure(0, weight=1)
+    canvas_frame.rowconfigure(1, weight=1)
+    canvas_frame.grid_propagate(False)
 
-entry_frame = tkinter.Frame(btn_frame,bg=palette.get("frame"), height= 500)
-entry_frame.pack(side = "bottom", fill="both", expand="yes")
+    global btn_frame
+    btn_frame = tkinter.Frame(root, bg=palette.get("bg"),height=725,width=523)
+    btn_frame.grid(padx=(0,10), pady="10",column=1,row=0, sticky="nsew")
 
-entry_frame_ans= tkinter.Frame(entry_frame,bg=palette.get("frame"))
-entry_frame_ans.pack(side="right", pady="10",fill="both", expand="yes")
-entry_frame_stu= tkinter.Frame(entry_frame,bg=palette.get("frame"))
-entry_frame_stu.pack(side="left", pady=10,padx=(10,0), fill="both", expand="yes")
+    mark_frame = tkinter.Frame(btn_frame, bg=palette.get("bg"))
+    mark_frame.pack(side="bottom", fill="x")
+    mark_btn=tkinter.Button(mark_frame, text="Mark Exams", height = 4, width = 20,borderwidth=3, command=mark_exam)
+    mark_btn.pack(padx=(0,5),pady=(10,0), side='left', fill="both", expand='yes')
+    tkinter.Label(mark_frame, bg=palette.get("bg"), image=icon).pack(side='top')
+    tkinter.Label(mark_frame, text=version, bg = palette.get("bg")).pack(side='bottom')
 
-tkinter.Label(entry_frame_ans,text="Answer Key",width=9,height = 1,anchor="w",bg=palette.get("frame"),fg=palette.get("lighttext")).pack(sid="top", pady="10")
-ans_key_box=tkinter.Text(entry_frame_ans,width=10,height=2, bg=palette.get("whitespace"))
-ans_key_box.pack(padx = "10",fill="both",expand="yes")
+    entry_frame = tkinter.Frame(btn_frame,bg=palette.get("frame"), height= 500)
+    entry_frame.pack(side = "bottom", fill="both", expand="yes")
 
-tkinter.Label(entry_frame_stu, text="Student Names", height = 1, anchor="w",bg=palette.get("frame"),fg=palette.get("lighttext")).pack(side = "top", padx="10", pady="10")
-tkinter.Label(entry_frame_stu,wraplength=190, bg=palette.get("frame"),text="Organize the names in the same order as the scans\nExample: \n    Tanner Moore \n    Emily Hunt\n    Foster Holmes\n    Bailey Alexander\n    ...",anchor="w", font=small_font,fg=palette.get("lighttext"),justify="left").pack(side="bottom", pady="10", anchor=tkinter.NW)
-stu_names_box=tkinter.Text(entry_frame_stu,width=30,height=2,font=small_font, bg=palette.get("whitespace"))
-stu_names_box.pack(side = "top",fill="both",expand="yes")
+    entry_frame_ans= tkinter.Frame(entry_frame,bg=palette.get("frame"))
+    entry_frame_ans.pack(side="right", pady="10",fill="both", expand="yes")
+    entry_frame_stu= tkinter.Frame(entry_frame,bg=palette.get("frame"))
+    entry_frame_stu.pack(side="left", pady=10,padx=(10,0), fill="both", expand="yes")
 
-file_btn=tkinter.Button(btn_frame, text="Select Exam", height = 1, width = 20, borderwidth=3, command=choose_file)
-file_btn.pack(side="bottom",pady=(0,10),fill="x")
+    tkinter.Label(entry_frame_ans,text="Answer Key",width=9,height = 1,anchor="w",bg=palette.get("frame"),fg=palette.get("lighttext")).pack(sid="top", pady="10")
+    global ans_key_box
+    ans_key_box=tkinter.Text(entry_frame_ans,width=10,height=2, bg=palette.get("whitespace"))
+    ans_key_box.pack(padx = "10",fill="both",expand="yes")
 
-root.mainloop()
+    tkinter.Label(entry_frame_stu, text="Student Names", height = 1, anchor="w",bg=palette.get("frame"),fg=palette.get("lighttext")).pack(side = "top", padx="10", pady="10")
+    tkinter.Label(entry_frame_stu,wraplength=190, bg=palette.get("frame"),text="Organize the names in the same order as the scans\nExample: \n    Tanner Moore \n    Emily Hunt\n    Foster Holmes\n    Bailey Alexander\n    ...",anchor="w", font=small_font,fg=palette.get("lighttext"),justify="left").pack(side="bottom", pady="10", anchor=tkinter.NW)
+    global stu_names_box
+    stu_names_box=tkinter.Text(entry_frame_stu,width=30,height=2,font=small_font, bg=palette.get("whitespace"))
+    stu_names_box.pack(side = "top",fill="both",expand="yes")
+
+    file_btn=tkinter.Button(btn_frame, text="Select Exam", height = 1, width = 20, borderwidth=3, command=choose_file)
+    file_btn.pack(side="bottom",pady=(0,10),fill="x")
+
+    root.mainloop()
+if __name__ == '__main__':
+    main()
 
 
