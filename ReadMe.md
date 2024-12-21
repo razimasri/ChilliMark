@@ -6,7 +6,7 @@ Computerized Heuristic Identification for Landmark-Less Input and Multiple-choic
 
 
 
-nuitka --onefile --enable-plugin=tk-inter --windows-console-mode=disable --windows-icon-from-ico=icons\Icon.ico --product-version=1.0 ChilliMark.py
+nuitka --onefile --enable-plugin=tk-inter --windows-console-mode=disable --windows-icon-from-ico=icons\Iconv2.ico --product-version=1.0 ChilliMark.py
 
 
 
