@@ -1,0 +1,4 @@
+
+
+cx_freeze
+cxfreeze  --script ChilliMark.py --icon icons\Iconv2.ico
