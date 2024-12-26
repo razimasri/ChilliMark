@@ -27,23 +27,24 @@ Generate a CSV with both each students score and individual question response ra
 If two boxes are detected with answers the user can choose the correct questions
 
 ## Usage
+1. Scan your completed exams using 600 DPI. 
 
 1. Load your PDF - Drag and drop is supported
 
 
-2. Enter Students names and answer key and hit continue 
+1. Enter Students names and answer key and hit continue 
 
 ![Load Pages](/RDimages/image-3.png)
 
-3. Select the question area and define one empty box. This needs to be quite tightly around the box for the best results. Since this is the box used to detect and understand the image it is worth find the best one free of any scanning artifacts
+1. Select the question area and define one empty box. This needs to be quite tightly around the box for the best results. Since this is the box used to detect and understand the image it is worth find the best one free of any scanning artifacts
 
 ![Highlight key area](/RDimages/image-4.png)
 
-4. Enter corrections
+1. Enter corrections
 
 ![Clear up ambiguities](/RDimages/image-5.png)
 
-5. Finished. Review the output for any mistakes. Run again is there are issue. I hope to allow finer corrections in future updates
+1. Finished. Review the output for any mistakes. Run again is there are issue. I hope to allow finer corrections in future updates
 
 ## Future Improvements
 1. Round bubbles
@@ -57,6 +58,10 @@ If two boxes are detected with answers the user can choose the correct questions
 1. Phone and Tablet version
 1. IOS Version
 1. Appends statistics to a report page
+
+## Known Issues
+1. Sometimes the detected boxes do not line up with the real boxes. 
+1. Boxes that seem perfectly fine visually are processed differently resulting in errors and rejections.
 
 
 

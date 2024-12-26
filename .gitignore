@@ -4,4 +4,5 @@ ChilliMark.onefile-build
 .venv/
 .vscode
 .env
+output
 

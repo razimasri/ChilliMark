@@ -1,4 +1,3 @@
-
 import time
 import math
 import tkinter
@@ -16,6 +15,8 @@ import os
 import pymupdf
 import operator
 import ctypes
+import sys
+import webbrowser
 
 class Gui:	
 
@@ -25,7 +26,9 @@ class Gui:
 		"whitespace" : "#e3e5ef",
 		"lighttext" : "#e3e5ef",
 		"bg": "#8c1529",
-		"button": "#b1a1a4"}
+		"button": "#b1a1a4",
+		"lightgreen" : "#00713e",
+		"darkgreen" : "#02251a"}
 	
 	class Rectangle:
 		def __init__(self):
@@ -85,11 +88,11 @@ class Gui:
 		ctypes.windll.shcore.SetProcessDpiAwareness(1)
 		self.version = ["v1.0","Adjuma"] #["v0.9","Capsaicin"]
 
-		self.icon = tksvg.SvgImage(file=r"icons\iconwhite.svg", scaletoheight = 128 )
-		self.sel_img = tksvg.SvgImage(file=r"icons\selection.svg")
-		self.pdf_icon = tksvg.SvgImage(file=r"icons\pdf.svg", scaletoheight = 256 )
-		self.frames = [PIL.Image.open(f"icons\\animations\\pageprocess\\{file}") for file in os.listdir(r"icons\animations\pageprocess")]
-		self.root.tk.call('wm', 'iconphoto', self.root._w, PIL.ImageTk.PhotoImage(file=r"icons\Icon16.ico"))
+		self.icon = tksvg.SvgImage(file=get_path(r"icons\iconwhite.svg"), scaletoheight = 128 )
+		self.sel_img = tksvg.SvgImage(file=get_path(r"icons\selection.svg"))
+		self.pdf_icon = tksvg.SvgImage(file=get_path(r"icons\pdf.svg"), scaletoheight = 256 )
+		self.frames = [PIL.Image.open(get_path(f"icons\\animations\\pageprocess\\{file}")) for file in os.listdir(get_path(r"icons\animations\pageprocess"))]
+		self.root.tk.call('wm', 'iconphoto', self.root._w, PIL.ImageTk.PhotoImage(file=get_path(r"icons\Icon16.ico")))
 
 		self.root.title("Chilli Marker")
 		self.root.configure(borderwidth=2,background=Gui.palette.get("bg"))
@@ -98,6 +101,8 @@ class Gui:
 
 		self.default_font = tkinter.font.nametofont("TkDefaultFont")
 		self.small_font=self.default_font.copy()
+		self.mid_font=self.default_font.copy()
+		self.mid_font.configure(size=14)
 		self.default_font.configure(size=14, weight="bold")
 		self.small_font.configure(size=10)
 		self.root.option_add("*Font", self.default_font)
@@ -175,7 +180,6 @@ class Gui:
 		elif not self.key_input or not self.names_input:
 			if not tkinter.messagebox.askokcancel(title="Missing Info", message= "You have not entered either the Student Names or Answer Key. \nAre you sure you want to continue?"):
 				return
-		print(self.next.get())
 		self.next.set(True)
 
 	def parameters(self,params):
@@ -199,11 +203,7 @@ class Gui:
 		self.box_frame.rowconfigure(index=0,weight=1)
 		self.box_frame.columnconfigure(index=0,weight=1)
 
-		def back():
-			self.home()
-			self.choose_file()
-
-		self.file_btn.config(text="Choose another file", command=back)
+		self.file_btn.config(text="Choose another file", command=lambda: params.reset(self))
 
 		self.box_canvas = tkinter.Canvas(self.box_frame, bd=0 ,bg=Gui.palette.get("frame"), highlightthickness=0, relief='ridge')#,width=339,height=445)
 		
@@ -245,7 +245,7 @@ class Gui:
 	def hscroll(self,event):
 		self.box_canvas.xview_scroll(-1 * (event.delta // 120), "units")
 
-	def marking(self):
+	def marking(self,queue):
 		
 		self.destroy_children(self.root)
 		self.corrections_frame = tkinter.Frame(self.root,bd=0,bg=Gui.palette.get("frame"))
@@ -257,21 +257,21 @@ class Gui:
 
 		self.progress_frame = tkinter.Frame(self.root)
 		self.progress_frame.grid(row=1,column=1)
-		self.proc_canvas = tkinter.Canvas(self.progress_frame,relief='ridge')
+		self.proc_canvas = tkinter.Canvas(self.progress_frame,relief='ridge',bg=Gui.palette.get("bg"), highlightthickness=0)
 		self.proc_canvas.pack()
 		self.panels = []
 		self.prog_size =(max(68,min(100,round(900/len(self.thumbs))))-4,round(1.41*max(68,(min(100,900/len(self.thumbs))))))
 		for img, _ in self.thumbs:
 			img.thumbnail(self.prog_size)
 			thumb = PIL.ImageTk.PhotoImage(img)
-			panel = tkinter.Label(self.proc_canvas,bd=2)
-			panel.pack(side="left")
+			panel = tkinter.Label(self.proc_canvas,bd=5)
+			panel.pack(padx=5,side="left")
 			panel.config(image=thumb)
 			panel.image = thumb
 			self.panels.append(panel)
 			self.canvas.update()
 		self.make_anim_boxes(self.anim_frame)
-		self.animate_page()
+		self.animate_page(queue)
 
 
 	def enter_corrections(self,image: PIL):
@@ -285,7 +285,7 @@ class Gui:
 		if all(student.responses):
 			img = student.pil_output.resize(self.prog_size)
 			thumb = PIL.ImageTk.PhotoImage(img)
-			self.panels[student.index].config(image=thumb)
+			self.panels[student.index].config(image=thumb, bd=5, bg=Gui.palette.get("lightgreen"))
 			self.panels[student.index].image = thumb
 			self.panels[student.index].update()
 		else:
@@ -299,9 +299,7 @@ class Gui:
 
 	def create_corrections_gui(self,choices: int):
 		"""Brings up a GUI to manually choose the student's response"""	
-		print("correction")
 		self.anim_bool.set(False)
-
 
 		self.correction_image_label = tkinter.Label(self.corrections_frame,bd=0,bg=Gui.palette.get("frame"))
 		self.correction_image_label.grid(pady="10",padx="10",row=0,column=0,sticky="ew")
@@ -330,8 +328,14 @@ class Gui:
 		tkinter.Button(self.root,text="Open marked pdf", command=lambda:os.startfile(f"{self.path}\\ChilliMark-{self.basename}.pdf"),cursor="hand2").pack(pady=5,padx =(10,0), fill="both")
 		tkinter.Button(self.root,text="Open stats", command=lambda:os.startfile(f"{self.path}{self.basename}.csv") ,cursor="hand2").pack(pady=5,padx =(10,0), fill="both")
 		tkinter.Button(self.root,text="Mark Another Exam", command=self.root.destroy,cursor="hand2").pack(pady=5,padx =(10,0), fill="both")
+		tkinter.Label(self.root, bg=Gui.palette.get("bg"), fg=Gui.palette.get("lighttext"), wraplength=350,font=self.mid_font,text="ChilliMark is developed by a solo dev. \n It is free to use by individual teachers. \n A watermark free version is available for $2 on Buy me a Coffee. \n If your school uses this as a matter of policy, please ask them to purchase the commercial copy.").pack(pady=5,padx =(10,0), fill="both")
+		tkinter.Button(self.root, text="Buy me a Coffee ☕", command = lambda:webbrowser.open("buymeacoffee.com/jumplogic/e/349532"), cursor = "hand2",).pack(side="bottom",pady=5,padx =(10,0), fill="both")
+		#tkinter.Label("Buy Chilli Commecial")
+		
 		tkinter.Label(self.root, bg=Gui.palette.get("bg"), image=self.icon).pack(side='bottom')
 		tkinter.Label(self.root, text=self.version, bg = Gui.palette.get("bg")).pack(side='bottom')
+		
+		
 		self.canvas = tkinter.Canvas(self.canvas_frame, bg=Gui.palette.get("frame"), bd=0, highlightthickness=0, relief='ridge')#height=705, width=520, 
 		self.canvas.grid(padx="10", pady="10", column=0,row=0, sticky="nsew")
 		self.canvas.propagate(False)
@@ -439,8 +443,6 @@ class Gui:
 		preview=tkinter.Label(self.canvas,bd=0)
 		
 		def set_img(index,imgs=imgs):
-
-			print(index)
 			temp = imgs[index].copy()
 			temp.thumbnail([600,855])
 			preview_img = PIL.ImageTk.PhotoImage(temp)
@@ -454,8 +456,6 @@ class Gui:
 			preview.bind("<Left>",lambda e:cycle_next_image(-1,index))
 			preview.bind("<MouseWheel>",lambda e:cycle_next_image(e.delta,index))
 			preview.bind("<Shift-MouseWheel>",lambda e:cycle_next_image(e.delta,index))
-			
-			
 
 		def reload(event):
 			preview.destroy()
@@ -469,14 +469,10 @@ class Gui:
 				index=0
 			else:
 				index = index+delta
-			print(delta,index)
 			set_img(index)
 
 		set_img(index)
 		
-
-
-
 	def thumb_grid(self,event=None,thumbs=None,imgs=None):
 		self.destroy_children(self.canvas)
 		for i, item in enumerate(thumbs):
@@ -521,21 +517,29 @@ class Gui:
 		box.canvas.itemconfig(box.cover,start = box.start)
 		box.swipe(boxes)
 		boxes.pop(-1)
-		#self.corrections_frame.after(200,lambda:self.animate_box(boxes))
-	
-	def animate_page(self):
-		"""Recursivly calls the multiprocessor queue to check progress of each page and updates the frame. There are 16 steps to the animation."""
-		index = random.randint(0,len(self.panels)-1)
-		frame = int(time.time()%16)
-		print(frame)
-		temp,_ = self.thumbs[index].copy()
-		x, y = self.prog_size
-		temp.paste(self.frames[frame],[x//2-16,y//2-15],self.frames[frame])
-		temp = PIL.ImageTk.PhotoImage(temp)
-		self.panels[index].config(image=temp)
-		self.panels[index].image = temp
+		try:
+			self.corrections_frame.after(200,lambda:self.animate_box(boxes))
+		except:
+			return
 
-		self.progress_frame.after(100,self.animate_page)
+	def animate_page(self,queue):
+		"""Recursivly calls the multiprocessor queue to check progress of each page and updates the frame. 
+		There are 16 steps to the animation."""
+	
+		if not self.anim_bool.get():
+			return
+		try: #since this is in a different thread it fails on last one
+			tup=queue.get(block=False)
+			index, frame = tup
+			temp,_ = self.thumbs[index].copy()
+			x, y = self.prog_size
+			temp.paste(self.frames[frame],[x//2-16,y//2-15],self.frames[frame])
+			temp = PIL.ImageTk.PhotoImage(temp)
+			self.panels[index].config(image=temp)
+			self.panels[index].image = temp
+		except:
+			pass
+		self.progress_frame.after(100,lambda: self.animate_page(queue))
 
 	#Minor functions in the GUI
 	def destroy_children(self,parent):
@@ -550,3 +554,12 @@ class Gui:
 
 	def	bad_box(self):
 		tkinter.messagebox.showinfo(message="Please try selecting the box again")
+
+def get_path(filename):
+	if hasattr(sys, "_MEIPASS"):
+		return os.path.join(sys._MEIPASS, filename)
+	else:
+		return filename
+
+if __name__ == "__main__":
+	pass
