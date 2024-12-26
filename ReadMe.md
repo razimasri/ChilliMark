@@ -1,4 +1,4 @@
-![ChilliMark Logo](/icons/banner.png)
+![ChilliMark Logo](/icons/Banner.png)
 # ChilliMark 
 
 
