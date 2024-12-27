@@ -4,6 +4,8 @@
 
 ChilliMark Heuristical Identification of Landmark-Less Input Multiple-choice Answer Recognition Kernel
 
+[Download](https://github.com/razimasri/ChilliMark/blob/1b78ac374ade0c9d9ad71d4611741c46c9f0335e/ChilliMark-Free.exe)
+
 ChilliMark is able to mark some multiple choice sheets without the use of QR code or other landmarks and predefined templates 
 
 It was developed against the multiple choice sheets for the IBDP and IGCSE exams boards. Specifically it was developed for the science version of the multiple choice sheets.
