@@ -1,8 +1,10 @@
-![ChilliMark Logo](/icons/banner.png)
+![ChilliMark Logo](/icons/Banner.png)
 # ChilliMark 
 
 
 ChilliMark Heuristical Identification of Landmark-Less Input Multiple-choice Answer Recognition Kernel
+
+[Download](https://github.com/razimasri/ChilliMark/blob/1b78ac374ade0c9d9ad71d4611741c46c9f0335e/ChilliMark-Free.exe)
 
 ChilliMark is able to mark some multiple choice sheets without the use of QR code or other landmarks and predefined templates 
 
@@ -29,22 +31,22 @@ If two boxes are detected with answers the user can choose the correct questions
 ## Usage
 1. Scan your completed exams using 600 DPI. 
 
-1. Load your PDF - Drag and drop is supported
+2. Load your PDF - Drag and drop is supported
 
 
-1. Enter Students names and answer key and hit continue 
+3. Enter Students names and answer key and hit continue 
 
 ![Load Pages](/RDimages/image-3.png)
 
-1. Select the question area and define one empty box. This needs to be quite tightly around the box for the best results. Since this is the box used to detect and understand the image it is worth find the best one free of any scanning artifacts
+4. Select the question area and define one empty box. This needs to be quite tightly around the box for the best results. Since this is the box used to detect and understand the image it is worth find the best one free of any scanning artifacts
 
 ![Highlight key area](/RDimages/image-4.png)
 
-1. Enter corrections
+5. Enter corrections
 
 ![Clear up ambiguities](/RDimages/image-5.png)
 
-1. Finished. Review the output for any mistakes. Run again is there are issue. I hope to allow finer corrections in future updates
+6. Finished. Review the output for any mistakes. Run again is there are issue. I hope to allow finer corrections in future updates
 
 ## Future Improvements
 1. Round bubbles
