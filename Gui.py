@@ -86,7 +86,7 @@ class Gui:
 	def __init__(self):
 		self.root = tkinterdnd2.TkinterDnD.Tk()	
 		ctypes.windll.shcore.SetProcessDpiAwareness(1)
-		self.version = ["v1.0","Adjuma"] #["v0.9","Capsaicin"]
+		self.version = ["v1.1","Adjuma"] #["v0.9","Capsaicin"]
 
 		self.icon = tksvg.SvgImage(file=get_path(r"icons\iconwhite.svg"), scaletoheight = 128 )
 		self.sel_img = tksvg.SvgImage(file=get_path(r"icons\selection.svg"))

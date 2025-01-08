@@ -80,7 +80,17 @@ class Parameters:
 		self.fill_limit = 0
 		self.set_key(key)
 		self.template = template
-		self.names = names
+		self.names = []
+		self.clean_names(names)
+
+	def clean_names(self,names):
+		if names:
+			names = names.title()
+			names = names.split("\n")
+			for i, name in enumerate(names):
+				self.names.append(name.rstrip(", "))
+
+
 
 	def reset(self,gui):
 		gui.root.destroy()
@@ -109,7 +119,7 @@ class Parameters:
 		
 		percentage = abs(area(outer)-((self.box_y2-self.box_y1)*(self.box_x2-self.box_x1)))/area(outer)
 		if percentage>1:
-			print(percentage)
+			#print(percentage)
 			raise Exception("The area of the contour does not match the area of the selection")		
 		
 		#should make this based on eroded
@@ -121,7 +131,7 @@ class Parameters:
 		inner, _ = cv2.findContours(clip,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)	
 		inner = inner[0]
 		if len(inner)==0:
-			raise Exception("Inner contours does nto return a usable shape")
+			raise Exception("Inner contours does not return a usable shape")
 		self.h = h
 		self.w = w
 		self.outer = outer-contour_center(outer)
@@ -182,7 +192,10 @@ class Student:
 	colours = {"red": (200,0,0),"yellow": (250,170,0),"green": (0,170,0)}
 
 	def __init__(self,filename,i,params,queue):
-		self.name: str = f"Student {i+1:0{params.num}}"
+		if params.names:
+			self.name=params.names[i]
+		else:
+			self.name: str = f"Student {i+1:0{params.num}}"
 		self.index: int = i 
 
 		self.params = params
@@ -248,7 +261,7 @@ class Student:
 		
 		columns = sort_into_columns(boxes,params)
 		sort_into_rows(boxes,params)
-		missing(columns,params)
+		missing(columns,params,q_area)
 		
 		self.questions = find_questions(columns,params)
 		self.animation_step(10)
@@ -288,7 +301,7 @@ class Student:
 			text_x = x+params.text_shift[0]
 			cv2.putText(image,params.key[question.number], (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, params.font_size,(255,255,255),20,lineType=cv2.LINE_AA) 
 			cv2.putText(image,params.key[question.number], (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, params.font_size,Student.colours.get("green"),7,lineType=cv2.LINE_AA) 
-		if question.response:
+		if all(self.responses):
 			self.scan = cv2.putText(self.scan,f"Score = {self.score} / {len(params.key)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA)
 			self.scan= cv2.putText(self.scan,f"Score = {self.score} / {len(params.key)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)		
 		return image
@@ -461,7 +474,8 @@ def find_boxes(q_area,params):
 	sorted_cnts = [c for i, c in enumerate(cnts) if hier[0][i][3]==-1]
 	sorted_cnts = sorted(sorted_cnts, key=area, reverse=True)
 
-	limit = 0.9*params.h*params.w
+
+	limit =int(0.85*params.h*params.w)
 	min_w= int(params.w*0.8)
 	min_h = int(params.h*0.8)
 	max_w = int(params.w*1.3)
@@ -473,7 +487,7 @@ def find_boxes(q_area,params):
 		_, _, w, h = cv2.boundingRect(c)
 		if w*h<limit:	
 			break
-		if min_w<= w <= max_w and min_h <= h <= max_h: 
+		if min_w<=w<=max_w and min_h<=h<=max_h: 
 			boxes.append(contour_center(c))
 			continue
 		if version == "narrow":
@@ -596,7 +610,7 @@ def sort_into_rows(boxes,params):
 	params.row_avg = row_avg
 	params.y_jump = int((row_avg[-1]-row_avg[0])/len(row_avg))
 
-def missing(columns,params): 
+def missing(columns,params,img): 
 	"""Find missing question based on gaps that do not match average Y position of rows"""
 	
 	columns_copy=columns.copy()
@@ -607,11 +621,12 @@ def missing(columns,params):
 			if 10<abs(y-params.row_avg[r+offset])<int(params.y_jump-10):
 				columns[c].pop(r+offset)
 				offset-=1
-				continue
 			elif abs(y-params.row_avg[r+offset])>params.h:
 				column.insert(r,[x,params.row_avg[r+offset]])
-		if len(params.row_avg)>len(column):
-			column.append([params.col_avg[c],params.row_avg[-1]])
+		m=-1		
+		while len(params.row_avg)>len(column):
+			column.append([params.col_avg[c],params.row_avg[m]])
+			m-=1
 		columns[c] = column
 	return (columns)
 
@@ -623,12 +638,17 @@ def find_questions(columns,params):
 		index = c%params.choices
 		stack[index]= stack[index]+column
 	questions=[]
+	
 	for r,row in enumerate(stack[0]):
 		question = Question(r)
 		for c,column in enumerate(stack):
-			box = Question.Box(column[r],c)
-			question.boxes.append(box)
+			try:
+				box = Question.Box(column[r],c)
+				question.boxes.append(box)
+			except:
+				print("column",column)
 		questions.append(question)
+				
 	return questions
 
 def find_responses(student: Student,image,params: Parameters):
@@ -652,7 +672,7 @@ def find_responses(student: Student,image,params: Parameters):
 def make_output(students: list,gui: Gui,params: Parameters):
 	
 
-	names(params.names,students)
+	
 	basename = os.path.basename(gui.filename)
 	path = gui.filename.replace(f"{basename}","")	
 	basename = basename.replace(".pdf","")
@@ -729,12 +749,7 @@ def make_csv(path_to_save,basename,students,params):
 	for x in csv_stats:
 		writer.writerow([""]+x)
 
-def names(names_input,students):
-	if names_input:
-		names_input = names_input.title()
-		names_input = names_input.split("\n")
-		for i, name in enumerate(names_input):
-			students[i].name = name.rstrip(", ") if name else students[i].name
+
 
 def area(n):
 	_,_,w,h = cv2.boundingRect(n)
@@ -782,7 +797,7 @@ def main():
 	gui = Gui.Gui()
 	gui.home()
 	params = load_inputs(gui)
-	
+#	names(params.names,students)
 	doc = pymupdf.open(gui.filename) #probably unecessary. remove after getting the returning of image correct
 	params.num = len(doc)//10+1
 	manager = multiprocessing.Manager()
