@@ -106,31 +106,35 @@ class Parameters:
 		extra = 0
 		check_area = 0
 		outer_area = cv2.contourArea(outer)
-		while check_area != outer_area:
+		while abs(check_area - outer_area)>10:
 			outer_area = 0 + check_area
-			check_img = get_thresh(image[int(self.box_y1-extra):int(self.box_y2+extra*2),int(self.box_x1-extra):int(self.box_x2+extra*2)],blur=False)
+			check_img = get_thresh(image[int(self.box_y1-extra):int(self.box_y2+extra*2),int(self.box_x1-extra):int(self.box_x2+extra*2)],blur=True)
+			#cv2.imshow("clip",check_img)
+			#cv2.waitKey(0)
 			check_outer, _ = cv2.findContours(check_img,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 			check_outer = check_outer[0]
 			check_area = cv2.contourArea(check_outer)
 			outer = check_outer
 			extra+=1
-
 		outer = cv2.approxPolyDP(check_outer, 0.05*cv2.arcLength(outer, True), True)
+
 		
 		percentage = abs(area(outer)-((self.box_y2-self.box_y1)*(self.box_x2-self.box_x1)))/area(outer)
 		if percentage>1:
-			#print(percentage)
+			print(percentage)
 			raise Exception("The area of the contour does not match the area of the selection")		
 		
 		#should make this based on eroded
 		x, y, w, h = cv2.boundingRect(outer)
-		clip = cv2.bitwise_not(check_img)
+		clip = cv2.bitwise_not(check_img)		
 		clip = cv2.drawContours(clip,[outer],-1,0,w//6)
 		clip = clip[y:y+h,x:x+w]
 
-		inner, _ = cv2.findContours(clip,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)	
+
+		inner, _ = cv2.findContours(clip,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 		inner = inner[0]
 		if len(inner)==0:
+			print(len(inner))
 			raise Exception("Inner contours does not return a usable shape")
 		self.h = h
 		self.w = w
@@ -152,6 +156,7 @@ class Parameters:
 			text_shift[1] = text_size[1]//2
 		text_shift[0]=-text_size[0]//2
 		self.text_shift = text_shift
+		print("markup")
 	
 	def set_key(self,key_input):
 		"""Formats the user inputs for use. Adds answer key to Parameters and names to students"""
@@ -178,13 +183,13 @@ class Parameters:
 		self.box_y2 = int(gui.box_rect.y2true+self.y1)
 		self.box_x2 = int(gui.box_rect.x2true+self.x1)
 
-
+		#self.set_box(self.template)
 		try: 
 			self.set_box(self.template)
-			self.set_markup_size()
 		except:
 			gui.bad_box()
 		else:
+			self.set_markup_size()
 			return gui.next.set(True)
 
 class Student:
@@ -456,7 +461,7 @@ def get_thresh(image,blur=True):
 	if blur:
 		image = cv2.medianBlur(image,5)
 	image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-	return cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 27,4)
+	return cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 27,5)
 
 def	contour_center(contour):
 	M = cv2.moments(contour)
@@ -475,7 +480,7 @@ def find_boxes(q_area,params):
 	sorted_cnts = sorted(sorted_cnts, key=area, reverse=True)
 
 
-	limit =int(0.85*params.h*params.w)
+	limit =int(0.9*params.h*params.w)
 	min_w= int(params.w*0.8)
 	min_h = int(params.h*0.8)
 	max_w = int(params.w*1.3)
@@ -488,6 +493,7 @@ def find_boxes(q_area,params):
 		if w*h<limit:	
 			break
 		if min_w<=w<=max_w and min_h<=h<=max_h: 
+			#cv2.drawContours(q_area,[c],-1,(255,0,255),3)
 			boxes.append(contour_center(c))
 			continue
 		if version == "narrow":
@@ -618,11 +624,15 @@ def missing(columns,params,img):
 		offset=0
 		for r, row in enumerate(column):
 			x,y = row
-			if 10<abs(y-params.row_avg[r+offset])<int(params.y_jump-10):
+			if abs(y-params.row_avg[r+offset])>params.h:
+				#print("adding")
+				#cv2.putText(img,f"{r+offset},{c}",[x,params.row_avg[r+offset]],1,4,(244,4,4),3)
+				column.insert(r,[x,params.row_avg[r+offset]])
+			elif 20<abs(y-params.row_avg[r+offset])<int(params.y_jump-10):
+				#cv2.putText(img,f"pop{c},{r+offset}",[x-30,y],1,4,(0,224,4),3)
 				columns[c].pop(r+offset)
 				offset-=1
-			elif abs(y-params.row_avg[r+offset])>params.h:
-				column.insert(r,[x,params.row_avg[r+offset]])
+				
 		m=-1		
 		while len(params.row_avg)>len(column):
 			column.append([params.col_avg[c],params.row_avg[m]])
@@ -646,7 +656,7 @@ def find_questions(columns,params):
 				box = Question.Box(column[r],c)
 				question.boxes.append(box)
 			except:
-				print("column",column)
+				print("column",r,c)
 		questions.append(question)
 				
 	return questions
