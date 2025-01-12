@@ -88,6 +88,7 @@ class Parameters:
 			names = names.title()
 			names = names.split("\n")
 			for i, name in enumerate(names):
+				name = name.replace("\t"," ")
 				self.names.append(name.rstrip(", "))
 
 
@@ -593,7 +594,7 @@ def sort_into_rows(boxes,params):
 	row_index = 0
 	for i, box in enumerate(boxes):	 
 		_,y= box
-		if abs(y-prev_y) > params.h and i>0:
+		if abs(y-prev_y) > 0.95*params.h and i>0:
 			row_index +=1
 			rows.append([])
 		rows[row_index].append(box)
@@ -624,14 +625,20 @@ def missing(columns,params,img):
 		offset=0
 		for r, row in enumerate(column):
 			x,y = row
-			if abs(y-params.row_avg[r+offset])>params.h:
-				#print("adding")
-				#cv2.putText(img,f"{r+offset},{c}",[x,params.row_avg[r+offset]],1,4,(244,4,4),3)
-				column.insert(r,[x,params.row_avg[r+offset]])
-			elif 20<abs(y-params.row_avg[r+offset])<int(params.y_jump-10):
+
+			if 30<abs(y-params.row_avg[r+offset])<int(params.y_jump-30):
+				#print(y-params.row_avg[r+offset],int(params.y_jump))
 				#cv2.putText(img,f"pop{c},{r+offset}",[x-30,y],1,4,(0,224,4),3)
 				columns[c].pop(r+offset)
 				offset-=1
+			if 10<abs(y-params.row_avg[r+offset])<int(params.y_jump-10):
+				#cv2.putText(img,f"pop{c},{r+offset}",[x-30,y],1,4,(0,224,4),3)
+				columns[c][r+offset]=[x,params.row_avg[r+offset]]			
+				#offset-=1
+			elif abs(y-params.row_avg[r+offset])>params.h:
+				#print("adding")
+				#cv2.putText(img,f"{r+offset},{c}",[x,params.row_avg[r+offset]],1,4,(244,4,4),3)
+				column.insert(r,[x,params.row_avg[r+offset]])
 				
 		m=-1		
 		while len(params.row_avg)>len(column):
@@ -727,7 +734,8 @@ def make_csv(path_to_save,basename,students,params):
 	file = open(f"{path_to_save}/{basename}.csv", 'w' ,newline='')
 	
 	writer = csv.writer(file, dialect='excel', )
-	writer.writerow(["Student Name"]+[f"Out of {len(params.key)}"]+list(params.key.keys()))
+	q_nums = [num+1 for num in list(params.key.keys())]
+	writer.writerow(["Student Name"]+[f"Out of {len(params.key)}"]+q_nums)
 	writer.writerow(["Answer Key"]+[""]+list(params.key.values()))
 	for student in students:
 		writer.writerow([student.name]+[student.score]+student.responses)	

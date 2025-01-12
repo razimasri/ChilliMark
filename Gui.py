@@ -86,7 +86,7 @@ class Gui:
 	def __init__(self):
 		self.root = tkinterdnd2.TkinterDnD.Tk()	
 		ctypes.windll.shcore.SetProcessDpiAwareness(1)
-		self.version = ["v1.1","Adjuma"] #["v0.9","Capsaicin"]
+		self.version = ["v1.2","Adjuma"] #["v0.9","Capsaicin"]
 
 		self.icon = tksvg.SvgImage(file=get_path(r"icons\iconwhite.svg"), scaletoheight = 128 )
 		self.sel_img = tksvg.SvgImage(file=get_path(r"icons\selection.svg"))
@@ -326,7 +326,7 @@ class Gui:
 		tkinter.Label(self.root, bg=Gui.palette.get("bg"), fg=Gui.palette.get("lighttext"), wraplength=300, text=f"Finished \n The results have been saved in \n {self.path}").pack(pady=20,padx =(10,0), fill="both")
 		tkinter.Button(self.root,text="Open results folder", command=lambda:os.startfile(self.path),cursor="hand2").pack(pady=5, padx =(10,0), fill="both")
 		tkinter.Button(self.root,text="Open marked pdf", command=lambda:os.startfile(f"{self.path}\\ChilliMark-{self.basename}.pdf"),cursor="hand2").pack(pady=5,padx =(10,0), fill="both")
-		tkinter.Button(self.root,text="Open stats", command=lambda:os.startfile(f"{self.path}{self.basename}.csv") ,cursor="hand2").pack(pady=5,padx =(10,0), fill="both")
+		tkinter.Button(self.root,text="Open stats", command=lambda:os.startfile(f"{self.path}\\{self.basename}.csv") ,cursor="hand2").pack(pady=5,padx =(10,0), fill="both")
 		tkinter.Button(self.root,text="Mark Another Exam", command=self.root.destroy,cursor="hand2").pack(pady=5,padx =(10,0), fill="both")
 		tkinter.Label(self.root, bg=Gui.palette.get("bg"), fg=Gui.palette.get("lighttext"), wraplength=350,font=self.mid_font,text="ChilliMark is developed by a solo dev. \n It is free to use by individual teachers. \n A watermark free version is available for $2 on Buy me a Coffee. \n If your school uses this as a matter of policy, please ask them to purchase the commercial copy.").pack(pady=5,padx =(10,0), fill="both")
 		tkinter.Button(self.root, text="Buy me a Coffee ☕", command = lambda:webbrowser.open("buymeacoffee.com/jumplogic/e/349532"), cursor = "hand2",).pack(side="bottom",pady=5,padx =(10,0), fill="both")
