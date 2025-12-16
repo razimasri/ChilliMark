@@ -12,6 +12,7 @@ import PIL
 import PIL.Image
 import Gui
 import sys
+import time
 
 #Dedicated to my Wife
 
@@ -88,6 +89,7 @@ class Parameters:
 			names = names.title()
 			names = names.split("\n")
 			for i, name in enumerate(names):
+				name = name.replace("*"," ")
 				name = name.replace("\t"," ")
 				self.names.append(name.rstrip(", "))
 
@@ -157,7 +159,6 @@ class Parameters:
 			text_shift[1] = text_size[1]//2
 		text_shift[0]=-text_size[0]//2
 		self.text_shift = text_shift
-		print("markup")
 	
 	def set_key(self,key_input):
 		"""Formats the user inputs for use. Adds answer key to Parameters and names to students"""
@@ -236,9 +237,10 @@ class Student:
 		return pickles
 	
 	def animation_step(self,target):
-		while self.frame <= target:
-			self.queue.put([self.index,self.frame])
-			self.frame += 1
+		# Increase frame one-by-one so GUI sees progress over time
+		# but do NOT loop tightly (workers must not spin)
+		if target > self.frame:
+			self.frame = target
 	
 	def pdfs_to_images(self,filename: str,i: int,params: Parameters):
 		"""Opens up the doc file and create the image. 
@@ -265,7 +267,7 @@ class Student:
 		
 		self.animation_step(8)
 		
-		columns = sort_into_columns(boxes,params)
+		columns,boxes = sort_into_columns(boxes,params)
 		sort_into_rows(boxes,params)
 		missing(columns,params,q_area)
 		
@@ -308,8 +310,9 @@ class Student:
 			cv2.putText(image,params.key[question.number], (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, params.font_size,(255,255,255),20,lineType=cv2.LINE_AA) 
 			cv2.putText(image,params.key[question.number], (text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX, params.font_size,Student.colours.get("green"),7,lineType=cv2.LINE_AA) 
 		if all(self.responses):
-			self.scan = cv2.putText(self.scan,f"Score = {self.score} / {len(params.key)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA)
-			self.scan= cv2.putText(self.scan,f"Score = {self.score} / {len(params.key)}",(4270-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)		
+			score_size = cv2.getTextSize(f"Score =  {self.score} / {len(params.key)}",cv2.FONT_HERSHEY_SIMPLEX, 5,7)[0]
+			self.scan = cv2.putText(self.scan,f"Score = {self.score} / {len(params.key)}",(4644-score_size[0],700),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA)
+			self.scan= cv2.putText(self.scan,f"Score = {self.score} / {len(params.key)}",(4644-score_size[0],700),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)		
 		return image
 
 def corrections(students: list, gui: Gui.Gui, params: Parameters):
@@ -345,9 +348,12 @@ def corrections(students: list, gui: Gui.Gui, params: Parameters):
 				question.response_box = question.boxes[ord(question.response)-65]
 
 			if params.key:
-				if params.key[question.number]==question.response:
-					question.response_box.colour="green"
-					student.score+=1
+				try:
+					if params.key[question.number]==question.response:
+						question.response_box.colour="green"
+						student.score+=1
+				except:
+					continue
 		cor_update = threading.Thread(target=correction_update, args=[student,gui,params])
 		cor_update.start()
 
@@ -358,8 +364,9 @@ def correction_update(student: Student,gui: Gui,params:Parameters):
 	for question in student.incomplete:
 		question.annotate(params,q_area)
 	if params.key:
-		student.scan = cv2.putText(student.scan,f"Score = {student.score} / {len(params.key)}",(4260-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA)
-		student.scan= cv2.putText(student.scan,f"Score = {student.score} / {len(params.key)}",(4260-params.score_size[0],512),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)
+		score_size = cv2.getTextSize(f"Score =  {student.score} / {len(params.key)}",cv2.FONT_HERSHEY_SIMPLEX, 5,7)[0]
+		student.scan = cv2.putText(student.scan,f"Score = {student.score} / {len(params.key)}",(4644-score_size[0],700),cv2.FONT_HERSHEY_SIMPLEX, 5,(255,255,255),15,cv2.LINE_AA)
+		student.scan= cv2.putText(student.scan,f"Score = {student.score} / {len(params.key)}",(4644-score_size[0],700),cv2.FONT_HERSHEY_SIMPLEX, 5,(0,0,0),7,cv2.LINE_AA)
 	student.scan[params.y1:params.y2,params.x1:params.x2] = q_area
 	student.pil_output = PIL.Image.fromarray(student.scan)
 	try: #gui may have moved onto complete for final image if this was the last correction which can cause an error
@@ -510,7 +517,7 @@ def erode_messy(c,q_area,params,boxes):
 	erode_mask = cv2.drawContours(erode_mask,[c],-1,(255,255,255),-1) 						
 	kernel = numpy.ones((31, 31), numpy.uint8)
 	erode_mask = cv2.erode(erode_mask,kernel=kernel,iterations=1)
-	erode_mask = cv2.cvtColor(erode_mask,cv2.COLOR_BGR2GRAY) 		
+	erode_mask = cv2.cvtColor(erode_mask,cv2.COLOR_BGR2GRAY) 
 	erode_cnts,_= cv2.findContours(erode_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 	for e_cnt in erode_cnts: 
 		x, y, w, h = cv2.boundingRect(e_cnt)
@@ -533,6 +540,7 @@ def slice_messy(q_area,e_cnt,params,x,y,w,h,boxes):
 		cv2.line(slice_mask,(x-10,y+k*h//y_scale),(x+w+10,y+k*h//y_scale),(0,0,0),15)
 		k+=1
 	slice_mask = cv2.cvtColor(slice_mask,cv2.COLOR_RGB2GRAY)
+
 	slice_cnts,_= cv2.findContours(slice_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)		
 	for s_cnt in slice_cnts: 
 		_, _, sw, sh = cv2.boundingRect(s_cnt)
@@ -556,10 +564,9 @@ def sort_into_columns(boxes,params: Parameters):
 			columns.append([])
 		columns[col_index].append(box)
 		prev_x = x
-	copy_columns = columns.copy()
-	for i, column in enumerate(copy_columns):
-		if len(column) ==1:
-			columns.pop(i)
+		
+	columns = [c for c in columns if len(c) > 2]
+	
 	col_avg=[]
 	for c, column in enumerate(columns):
 		columns[c] = sorted(column, key=operator.itemgetter(1))
@@ -580,7 +587,8 @@ def sort_into_columns(boxes,params: Parameters):
 			break
 		prev=x_pos
 		params.choices=i+1
-	return columns
+	filtered_boxes = [box for column in columns for box in column]
+	return columns,filtered_boxes
 
 def sort_into_rows(boxes,params):
 	"""Sorts them from left to right. 
@@ -599,11 +607,9 @@ def sort_into_rows(boxes,params):
 			rows.append([])
 		rows[row_index].append(box)
 		prev_y = y	
-	copy_rows = rows.copy()
-	for i, row in enumerate(copy_rows):
-		if len(row) ==1:
-			print("lone",i)
-			rows.pop(i)
+
+	#Remove single rows
+	rows = [r for r in rows if len(r) > 2]
 	
 	row_avg=[]
 	for r, row in enumerate(rows):
@@ -612,14 +618,65 @@ def sort_into_rows(boxes,params):
 		for c in rows[r]:
 			_,y = c
 			y_pos.append(y)
+		#y_pos.sort()
+		#mid = len(y_pos) // 2
+
+		#if len(y_pos) % 2:
+			#row_center = y_pos[mid]
+		#else:
+			#row_center = (y_pos[mid - 1] + y_pos[mid]) / 2
+
+		#row_avg.append(int(row_center))
+
 		avg = sum(y_pos)/len(y_pos)
 		row_avg.append(int(avg))
 	params.row_avg = row_avg
-	params.y_jump = int((row_avg[-1]-row_avg[0])/len(row_avg))
+	if len(row_avg) > 1:
+		gaps = [row_avg[i+1] - row_avg[i] for i in range(len(row_avg) - 1)]
+		gaps.sort()
 
-def missing(columns,params,img): 
-	"""Find missing question based on gaps that do not match average Y position of rows"""
-	
+		n = len(gaps)
+		params.y_jump = (
+			0 if n == 0 else
+			gaps[n//2] if n % 2 else
+			int((gaps[n//2 - 1] + gaps[n//2]) / 2)
+		)
+	else:
+		params.y_jump = 0
+
+
+def missing(columns, params, img):
+	# """Align boxes to expected row positions and fill missing rows."""
+
+	# for c, column in enumerate(columns):
+	# 	new_column = []
+	# 	col_x = params.col_avg[c]
+
+	# 	row_idx = 0  # pointer into existing column
+	# 	tol = min(params.h * 0.6, params.y_jump * 0.45)
+	# 	for r, expected_y in enumerate(params.row_avg):
+
+	# 		if row_idx < len(column):
+	# 			x, y = column[row_idx]
+				
+
+	# 			# Case 1: box belongs to this row → snap
+	# 			if abs(y - expected_y) <= tol and abs(y - expected_y) <= params.h * 0.35:
+	# 				new_column.append([x, expected_y])
+	# 				row_idx += 1
+	# 				continue
+
+	# 		# Case 2: missing row → insert placeholder
+	# 		new_column.append([col_x, expected_y])
+
+	# 	columns[c] = new_column
+
+	# return (columns)
+
+
+
+
+
 	columns_copy=columns.copy()
 	for c, column in enumerate(columns_copy):
 		offset=0
@@ -665,6 +722,8 @@ def find_questions(columns,params):
 			except:
 				print("column",r,c)
 		questions.append(question)
+	if params.key:
+		questions = questions[:len(params.key)]
 				
 	return questions
 
@@ -780,15 +839,15 @@ def get_path(filename):
 		return filename
 
 
-def unpickle(results,students,gui):
+#def unpickle(results,students,gui):
+def unpickle(pickles,students):
 	"""Multiprocessing only handles certain types of object. Even with Dill. 
 	This function unpacks the results back into class objects. 
 	Classes are still used on this side to make managements easier and 
 	because I do not want to refactor everything"""
 	
-	pickles = results.get()
+	#pickles = results.get()
 	for i, pickle in enumerate(pickles):
-
 		students[i].scan = pickle[0]
 		students[i].responses = pickle[1]
 		students[i].score = pickle[2]
@@ -808,8 +867,30 @@ def unpickle(results,students,gui):
 			if question.response_box:
 				question.response_box = question.boxes[ord(question.response)-65]
 			students[i].questions.append(question)
+		# incomplete questions
 		students[i].incomplete = [question for question in students[i].questions if not question.response]
+		
+		# reconstruct image for later correction drawing
 		students[i].pil_output = PIL.Image.fromarray(students[i].scan)
+
+def handle_results(pickles, students, gui, params):
+	"""
+	Runs on the MAIN Tkinter thread (via root.after).
+	- Unpickles worker output into Student objects
+	- Then runs corrections()
+	- Then produces output
+	"""
+	# Fill student objects
+	unpickle(pickles, students)
+
+	# Force a GUI refresh so animations end cleanly
+	gui.root.update_idletasks()
+
+	# Run correction UI (must be on main thread)
+	corrections(students, gui, params)
+
+	# Produce outputs (if this is heavy we can move file I/O to background later)
+	make_output(students, gui, params)
 
 def main():
 	gui = Gui.Gui()
@@ -818,24 +899,50 @@ def main():
 #	names(params.names,students)
 	doc = pymupdf.open(gui.filename) #probably unecessary. remove after getting the returning of image correct
 	params.num = len(doc)//10+1
-	manager = multiprocessing.Manager()
-	queue = manager.Queue()
-	students = [Student(gui.filename,i,params,queue) for i,_ in enumerate(doc)] 
-	pool = multiprocessing.Pool(len(doc)) 
-	results = pool.map_async(Student.get,students)
+	gui.marking()
+	queue = multiprocessing.Queue()
+	
+	def heavy_work():
+		
+		
+		students = [Student(gui.filename, i, params, queue)for i, _ in enumerate(doc)]
+		gui.students = students
+		
+		
+		pool = multiprocessing.pool.ThreadPool()
+		results = pool.map_async(Student.get, students)
+		pool.close()
 
-	gui.marking(queue)
-	anim_thread = threading.Thread(target=lambda: gui.animate_page(queue), daemon=True)
-	anim_thread.start()
-	def waiting(results):
-		unpickle(results,students,gui)
-		corrections(students,gui,params)
-		make_output(students,gui,params)
-
-	wait_thread = threading.Thread(target = waiting, args=[results])
-	wait_thread.start()
+		gui.results = results
+		
+		gui.root.after(500, gui.poll_progress)  
+		gui.root.update_idletasks()
+		
+		def waiting():
+			gui.root.update_idletasks()
+			print("waiting")
+			try:
+				pickles = results.get()
+			except Exception as e:
+				gui.root.after(0, lambda: tkinter.messagebox.showerror(
+					"Processing Error",
+					f"An error occurred in worker threads:\n{e}"
+				))
+				return
+			
+			gui.root.after(0,lambda: handle_results(pickles, students, gui, params))
+		
+		threading.Thread(target=waiting, daemon=True).start()
+		
+	
+	gui.root.update()
+	threading.Thread(target=heavy_work, daemon=True).start()
+	
+	# Start GUI event loop
+	
 	gui.root.mainloop()
-	main()
+	
+	
 
 if __name__ == '__main__':
 	multiprocessing.freeze_support()

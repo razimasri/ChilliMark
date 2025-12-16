@@ -86,7 +86,7 @@ class Gui:
 	def __init__(self):
 		self.root = tkinterdnd2.TkinterDnD.Tk()	
 		ctypes.windll.shcore.SetProcessDpiAwareness(1)
-		self.version = ["v1.2","Adjuma"] #["v0.9","Capsaicin"]
+		self.version = ["v1.3","Adjuma"] #["v0.9","Capsaicin"]
 
 		self.icon = tksvg.SvgImage(file=get_path(r"icons\iconwhite.svg"), scaletoheight = 128 )
 		self.sel_img = tksvg.SvgImage(file=get_path(r"icons\selection.svg"))
@@ -113,6 +113,8 @@ class Gui:
 
 		self.next = tkinter.BooleanVar(value=False)
 		self.anim_bool = tkinter.BooleanVar(value=True)
+		self.students = []
+		self.results = []
 		
 	def home(self):
 		self.destroy_children(self.root)
@@ -245,7 +247,8 @@ class Gui:
 	def hscroll(self,event):
 		self.box_canvas.xview_scroll(-1 * (event.delta // 120), "units")
 
-	def marking(self,queue):
+	def marking(self):
+		
 		
 		self.destroy_children(self.root)
 		self.corrections_frame = tkinter.Frame(self.root,bd=0,bg=Gui.palette.get("frame"))
@@ -261,6 +264,7 @@ class Gui:
 		self.proc_canvas.pack()
 		self.panels = []
 		self.prog_size =(max(68,min(100,round(900/len(self.thumbs))))-4,round(1.41*max(68,(min(100,900/len(self.thumbs))))))
+		
 		for img, _ in self.thumbs:
 			img.thumbnail(self.prog_size)
 			thumb = PIL.ImageTk.PhotoImage(img)
@@ -270,8 +274,35 @@ class Gui:
 			panel.image = thumb
 			self.panels.append(panel)
 			self.canvas.update()
-		self.make_anim_boxes(self.anim_frame)
-		self.animate_page(queue)
+		
+		self.animate_box(self.make_anim_boxes(self.anim_frame))	
+		
+		self.animation_frames = [0] * len(self.thumbs)
+		a=time.time()
+		self.root.update_idletasks()
+		self.root.update()
+		print(time.time()-a)
+		
+		#progress animation
+	
+	def poll_progress(self):
+		all_done = True
+		for i, student in enumerate(self.students):
+			if student.frame > self.animation_frames[i]:
+				self.animation_frames[i] = student.frame
+				self.update_page_animation(i, student.frame)
+			if self.animation_frames[i] < 15:   # e.g., FINAL_FRAME = 15
+				all_done = False
+
+		if not all_done:
+			self.root.after(80, self.poll_progress)
+		else:
+			# Small delay so user can see final frame, then let the background thread post-process.
+			# Do not call heavy work here; background thread will deliver results -> gui_handle_results_on_main_thread()
+			self.root.after(150, lambda: None)
+
+
+
 
 
 	def enter_corrections(self,image: PIL):
@@ -505,41 +536,52 @@ class Gui:
 			box.round()
 			boxes.append(box)	
 		random.shuffle(boxes)
-		self.animate_box(boxes)
+		return(boxes)
 
 	def animate_box(self,boxes):
 		"""Calculates a starting position for the animation loop. Then calls the actual animation loop for that box.
 		THen prepares animation for next box."""
-
+		if not boxes:
+			self.make_anim_boxes()
 		box = boxes[-1]
 		box.time=time.time()
 		box.start=math.degrees(time.time())%360
 		box.canvas.itemconfig(box.cover,start = box.start)
 		box.swipe(boxes)
-		boxes.pop(-1)
 		try:
-			self.corrections_frame.after(200,lambda:self.animate_box(boxes))
+			self.corrections_frame.after(300,lambda:self.animate_box(boxes))
+			boxes.pop(-1)
 		except:
 			return
+		
 
-	def animate_page(self,queue):
-		"""Recursivly calls the multiprocessor queue to check progress of each page and updates the frame. 
-		There are 16 steps to the animation."""
+	#def animate_page(self,queue):
+		#"""Recursivly calls the multiprocessor queue to check progress of each page and updates the frame. 
+		#There are 16 steps to the animation."""
 	
-		if not self.anim_bool.get():
-			return
-		try: #since this is in a different thread it fails on last one
-			tup=queue.get(block=False)
-			index, frame = tup
-			temp,_ = self.thumbs[index].copy()
-			x, y = self.prog_size
-			temp.paste(self.frames[frame],[x//2-16,y//2-15],self.frames[frame])
-			temp = PIL.ImageTk.PhotoImage(temp)
-			self.panels[index].config(image=temp)
-			self.panels[index].image = temp
-		except:
-			pass
-		self.progress_frame.after(100,lambda: self.animate_page(queue))
+		#if not self.anim_bool.get():
+			#return
+		#try: #since this is in a different thread it fails on last one
+			#tup=queue.get(block=False)
+			#index, frame = tup
+			#temp,_ = self.thumbs[index].copy()
+			#x, y = self.prog_size
+			#temp.paste(self.frames[frame],[x//2-16,y//2-15],self.frames[frame])
+			#temp = PIL.ImageTk.PhotoImage(temp)
+			#self.panels[index].config(image=temp)
+			#self.panels[index].image = temp
+		#except:
+			#pass
+		#self.progress_frame.after(100,lambda: self.animate_page(queue))
+
+	def update_page_animation(self, index, frame):
+		base, _ = self.thumbs[index].copy()
+		x, y = self.prog_size
+		overlay = self.frames[frame]
+		base.paste(self.frames[frame], [x//2-16, y//2-15], overlay)
+		thumb = PIL.ImageTk.PhotoImage(base)
+		self.panels[index].config(image=thumb)
+		self.panels[index].image = thumb
 
 	#Minor functions in the GUI
 	def destroy_children(self,parent):
