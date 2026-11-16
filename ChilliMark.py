@@ -13,6 +13,8 @@ import PIL.Image
 import Gui
 import sys
 import time
+import tkinter.messagebox
+from workers import copy_parameters, worker_count, process_student
 
 #Dedicated to my Wife
 
@@ -896,53 +898,49 @@ def main():
 	gui = Gui.Gui()
 	gui.home()
 	params = load_inputs(gui)
-#	names(params.names,students)
-	doc = pymupdf.open(gui.filename) #probably unecessary. remove after getting the returning of image correct
-	params.num = len(doc)//10+1
+	with pymupdf.open(gui.filename) as doc:
+		page_count = len(doc)
+	if not page_count:
+		tkinter.messagebox.showerror("Processing Error", "The PDF has no pages")
+		return
+	params.num = page_count//10+1
 	gui.marking()
 	queue = multiprocessing.Queue()
-	
-	def heavy_work():
-		
-		
-		students = [Student(gui.filename, i, params, queue)for i, _ in enumerate(doc)]
-		gui.students = students
-		
-		
-		pool = multiprocessing.pool.ThreadPool()
-		results = pool.map_async(Student.get, students)
-		pool.close()
+	# Each task owns mutable recognition state; large read-only images stay shared.
+	students = [Student(gui.filename, i, copy_parameters(params), queue)
+		for i in range(page_count)]
+	gui.students = students
+	pool = multiprocessing.pool.ThreadPool(processes=worker_count(page_count))
+	results = pool.map_async(process_student, students)
+	pool.close()
+	gui.results = results
 
-		gui.results = results
-		
-		gui.root.after(500, gui.poll_progress)  
-		gui.root.update_idletasks()
-		
-		def waiting():
-			gui.root.update_idletasks()
-			print("waiting")
-			try:
-				pickles = results.get()
-			except Exception as e:
-				gui.root.after(0, lambda: tkinter.messagebox.showerror(
-					"Processing Error",
-					f"An error occurred in worker threads:\n{e}"
-				))
-				return
-			
-			gui.root.after(0,lambda: handle_results(pickles, students, gui, params))
-		
-		threading.Thread(target=waiting, daemon=True).start()
-		
-	
-	gui.root.update()
-	threading.Thread(target=heavy_work, daemon=True).start()
-	
-	# Start GUI event loop
-	
-	gui.root.mainloop()
-	
-	
+	def check_results():
+		# Poll on Tk's thread. Workers never call root.after/update or create widgets.
+		if not results.ready():
+			gui.root.after(100, check_results)
+			return
+		pool.join()
+		try:
+			pickles = results.get()
+		except Exception as exc:
+			tkinter.messagebox.showerror("Processing Error",
+				f"An error occurred in worker threads:\n{exc}")
+			return
+		handle_results(pickles, students, gui, params)
+
+	# Both callbacks are registered by the main thread, after students exist.
+	gui.root.after(500, gui.poll_progress)
+	gui.root.after(100, check_results)
+	try:
+		gui.root.mainloop()
+	finally:
+		# terminate() stops queued tasks if the window is closed during processing.
+		# Already-running Python threads must finish their current task.
+		pool.terminate()
+		queue.close()
+		queue.join_thread()
+
 
 if __name__ == '__main__':
 	multiprocessing.freeze_support()
